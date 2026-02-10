@@ -1,0 +1,23 @@
+{
+  "name": "Bloom",
+  "short_name": "Bloom",
+  "description": "Bloom is a Second Brain app that nurtures your thoughts into a beautiful garden of knowledge.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#22c55e",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/bloomicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/bloomicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
