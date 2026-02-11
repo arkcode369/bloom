@@ -175,7 +175,7 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
                     ) : (
                       <div
                         className={cn(
-                          'flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer hover:bg-accent transition-colors',
+                          'flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer hover:bg-accent transition-colors relative overflow-hidden',
                           selectedTagId === tag.id && 'bg-accent'
                         )}
                         onClick={() => onSelectTag(tag.id)}
@@ -184,32 +184,32 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
                           className="h-3 w-3 rounded-full shrink-0"
                           style={{ backgroundColor: tag.color || '#8B9A7C' }}
                         />
-                        <span className="text-sm truncate flex-1">{tag.name}</span>
-                        <span className="text-xs text-muted-foreground">{tag.noteCount}</span>
-                        
-                        {/* Action buttons - visible on hover */}
-                        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity">
+                        <span className="font-body text-sm truncate flex-1">{tag.name}</span>
+                        <span className="font-body text-xs text-muted-foreground transition-all duration-300 ease-in-out group-hover:translate-x-[-48px]">
+                          {tag.noteCount}
+                        </span>
+                        <div className="absolute right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all duration-300 ease-in-out translate-x-12 group-hover:translate-x-0">
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6"
+                            className="h-4 w-4 shrink-0"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleStartEdit(tag);
                             }}
                           >
-                            <Pencil className="h-3 w-3" />
+                            <Pencil className="h-2 w-2" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 hover:text-destructive"
+                            className="h-4 w-4 shrink-0 hover:text-destructive"
                             onClick={(e) => {
                               e.stopPropagation();
                               setDeleteId(tag.id);
                             }}
                           >
-                            <Trash2 className="h-3 w-3" />
+                            <Trash2 className="h-2 w-2" />
                           </Button>
                         </div>
                       </div>

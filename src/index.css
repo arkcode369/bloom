@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Source+Sans+Pro:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -185,39 +185,44 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Source Sans Pro', system-ui, -apple-system, sans-serif;
   }
 
-  /* Typography */
+  /* Typography - Distinctive font hierarchy */
   h1,
   h2,
   h3,
   h4,
   h5,
   h6 {
-    @apply font-semibold tracking-tight;
+    @apply font-display tracking-tight;
   }
 
-  /* Landing page headlines use Plus Jakarta Sans */
+  /* Display typography for headings */
   .font-display {
-    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+    font-family: 'Playfair Display', serif;
   }
 
-  /* Enhanced prose headings for markdown preview */
+  /* Body typography */
+  .font-body {
+    font-family: 'Source Sans Pro', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Enhanced prose headings with distinctive typography */
   .prose h1 {
-    @apply text-3xl font-bold mt-8 mb-4 pb-2 border-b border-border text-foreground;
+    @apply text-3xl font-display font-bold mt-8 mb-4 pb-2 border-b border-border text-foreground;
   }
 
   .prose h2 {
-    @apply text-2xl font-semibold mt-6 mb-3 text-foreground;
+    @apply text-2xl font-display font-semibold mt-6 mb-3 text-foreground;
   }
 
   .prose h3 {
-    @apply text-xl font-semibold mt-5 mb-2 text-foreground;
+    @apply text-xl font-display font-semibold mt-5 mb-2 text-foreground;
   }
 
   .prose h4 {
-    @apply text-lg font-medium mt-4 mb-2 text-foreground;
+    @apply text-lg font-display font-medium mt-4 mb-2 text-foreground;
   }
 
   .prose strong {
@@ -420,9 +425,9 @@
 /* BlockNote Custom Styles */
 @layer components {
 
-  /* BlockNote editor container */
+  /* BlockNote editor container with body font */
   .bn-editor {
-    @apply bg-background text-foreground p-0;
+    @apply bg-background text-foreground p-0 font-body;
     font-size: var(--editor-font-size, 16px);
   }
 
@@ -436,22 +441,22 @@
     @apply py-1 px-0;
   }
 
-  /* BlockNote headings */
+  /* BlockNote headings with distinctive typography */
   .bn-editor h1 {
-    @apply text-3xl font-bold mt-6 mb-3 text-foreground;
+    @apply text-3xl font-display font-bold mt-6 mb-3 text-foreground;
   }
 
   .bn-editor h2 {
-    @apply text-2xl font-semibold mt-5 mb-2 text-foreground;
+    @apply text-2xl font-display font-semibold mt-5 mb-2 text-foreground;
   }
 
   .bn-editor h3 {
-    @apply text-xl font-semibold mt-4 mb-2 text-foreground;
+    @apply text-xl font-display font-semibold mt-4 mb-2 text-foreground;
   }
 
-  /* BlockNote paragraph */
+  /* BlockNote paragraph with body font */
   .bn-editor p {
-    @apply text-foreground leading-relaxed;
+    @apply text-foreground leading-relaxed font-body;
   }
 
   /* BlockNote inline code */
@@ -482,7 +487,6 @@
     @apply my-1;
   }
 
-
   .bn-editor input[type="checkbox"] {
     @apply mr-2 accent-primary;
   }
@@ -500,7 +504,7 @@
   }
 
   .dark .bn-editor {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-body;
   }
 }
 

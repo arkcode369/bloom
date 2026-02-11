@@ -137,7 +137,7 @@ export default function Index() {
             <SidebarTrigger className="mr-2" />
             <div className="flex items-center gap-2">
               <span className="text-xl">🌸</span>
-              <span className="font-semibold">Bloom</span>
+              <span className="font-display font-semibold">Bloom</span>
             </div>
           </header>
 

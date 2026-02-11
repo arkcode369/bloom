@@ -109,7 +109,7 @@ export default function AppSidebar({
             <span className="text-lg">🌸</span>
           </div>
           {!collapsed && (
-            <span className="font-semibold text-sm">Bloom</span>
+            <span className="font-display font-semibold text-sm">Bloom</span>
           )}
         </div>
       </SidebarHeader>
@@ -126,7 +126,7 @@ export default function AppSidebar({
                   className={cn('gap-2', activeView === 'home' && 'bg-accent')}
                 >
                   <Home className="h-4 w-4" />
-                  {!collapsed && <span>{t('sidebar.home')}</span>}
+                  {!collapsed && <span className="font-body text-sm font-medium">{t('sidebar.home')}</span>}
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
@@ -137,7 +137,7 @@ export default function AppSidebar({
                   className="gap-2"
                 >
                   <Search className="h-4 w-4" />
-                  {!collapsed && <span>{t('sidebar.search')}</span>}
+                  {!collapsed && <span className="font-body text-sm">{t('sidebar.search')}</span>}
                   {!collapsed && (
                     <kbd className="ml-auto text-xs bg-muted px-1.5 py-0.5 rounded">
                       {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+'}K
@@ -158,7 +158,7 @@ export default function AppSidebar({
                   ) : (
                     <Plus className="h-4 w-4" />
                   )}
-                  {!collapsed && <span>{t('sidebar.new_note')}</span>}
+                  {!collapsed && <span className="font-body text-sm">{t('sidebar.new_note')}</span>}
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
@@ -171,7 +171,7 @@ export default function AppSidebar({
                   <Inbox className="h-4 w-4" />
                   {!collapsed && (
                     <>
-                      <span>{t('sidebar.all_notes')}</span>
+                      <span className="font-body text-sm font-medium">{t('sidebar.all_notes')}</span>
                       <span className="ml-auto text-xs text-muted-foreground">
                         {notes?.length || 0}
                       </span>
@@ -189,7 +189,7 @@ export default function AppSidebar({
                   <Star className="h-4 w-4" />
                   {!collapsed && (
                     <>
-                      <span>{t('sidebar.starred')}</span>
+                      <span className="font-body text-sm font-medium">{t('sidebar.starred')}</span>
                       <span className="ml-auto text-xs text-muted-foreground">
                         {starredNotes?.length || 0}
                       </span>
@@ -205,7 +205,7 @@ export default function AppSidebar({
                   className="gap-2"
                 >
                   <Archive className="h-4 w-4" />
-                  {!collapsed && <span>{t('sidebar.archive')}</span>}
+                  {!collapsed && <span className="font-body text-sm">{t('sidebar.archive')}</span>}
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
@@ -216,7 +216,7 @@ export default function AppSidebar({
                   className="gap-2"
                 >
                   <Network className="h-4 w-4" />
-                  {!collapsed && <span>{t('sidebar.graph_view')}</span>}
+                  {!collapsed && <span className="font-body text-sm">{t('sidebar.graph_view')}</span>}
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
@@ -236,7 +236,7 @@ export default function AppSidebar({
                       <ChevronRight className="h-3 w-3" />
                     )}
                     <TagIcon className="h-3 w-3" />
-                    <span>{t('sidebar.tags')}</span>
+                    <span className="font-body text-sm font-medium">{t('sidebar.tags')}</span>
                   </div>
                 </SidebarGroupLabel>
               </CollapsibleTrigger>
@@ -267,7 +267,7 @@ export default function AppSidebar({
                       <ChevronRight className="h-3 w-3" />
                     )}
                     <FileText className="h-3 w-3" />
-                    <span>{t('sidebar.recent_notes')}</span>
+                    <span className="font-body text-sm font-medium">{t('sidebar.recent_notes')}</span>
                   </div>
                 </SidebarGroupLabel>
               </CollapsibleTrigger>
@@ -323,7 +323,7 @@ export default function AppSidebar({
               className="gap-2"
             >
               <HelpCircle className="h-4 w-4" />
-              {!collapsed && <span>{t('sidebar.help')}</span>}
+              {!collapsed && <span className="font-body text-sm">{t('sidebar.help')}</span>}
             </SidebarMenuButton>
           </SidebarMenuItem>
 
@@ -334,7 +334,7 @@ export default function AppSidebar({
               className="gap-2"
             >
               <Settings className="h-4 w-4" />
-              {!collapsed && <span>{t('sidebar.settings')}</span>}
+              {!collapsed && <span className="font-body text-sm">{t('sidebar.settings')}</span>}
             </SidebarMenuButton>
           </SidebarMenuItem>
 
@@ -349,10 +349,10 @@ export default function AppSidebar({
               colors={profile?.avatar_colors}
             />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium truncate">
+              <p className="font-body text-xs font-medium truncate">
                 {profile?.display_name || 'My Workspace'}
               </p>
-              <p className="text-xs text-muted-foreground truncate">
+              <p className="font-body text-xs text-muted-foreground truncate">
                 Local Database
               </p>
             </div>
