@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, Circle, PlayCircle, SkipForward, Plus, Timer, ExternalLink, Pencil, FileText, ChevronRight, ArrowLeft } from 'lucide-react';
+import { CheckCircle2, Circle, PlayCircle, SkipForward, Plus, Timer, ExternalLink, Pencil, FileText, ChevronRight, ArrowLeft, Minus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { useActiveTimeBlock } from '@/hooks/useActiveTimeBlock';
@@ -9,6 +9,9 @@ import { useDataAdapter } from '@/lib/data/DataProvider';
 import { useCreateTarget, useUpdateTarget } from '@/hooks/usePlanning';
 import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { TargetStatus, Note } from '@/lib/data/types';
+
+const WIDGET_FULL_SIZE = { width: 280, height: 400 };
+const WIDGET_MINIMIZED_SIZE = { width: 52, height: 52 };
 
 function formatDateLocal(date: Date): string {
   const y = date.getFullYear();
@@ -121,6 +124,30 @@ export function PlannerWidget() {
   const today = formatDateLocal(new Date());
   const adapter = useDataAdapter();
   const queryClient = useQueryClient();
+  const [minimized, setMinimized] = useState(false);
+
+  const toggleMinimize = useCallback(async () => {
+    try {
+      const win = getCurrentWebviewWindow();
+      if (minimized) {
+        // Restore to full size
+        document.body.style.background = '';
+        document.documentElement.style.background = '';
+        await win.setSize(new (await import('@tauri-apps/api/dpi')).LogicalSize(WIDGET_FULL_SIZE.width, WIDGET_FULL_SIZE.height));
+        setMinimized(false);
+      } else {
+        // Minimize to sakura ball — make body transparent so window is round
+        document.body.style.background = 'transparent';
+        document.documentElement.style.background = 'transparent';
+        await win.setSize(new (await import('@tauri-apps/api/dpi')).LogicalSize(WIDGET_MINIMIZED_SIZE.width, WIDGET_MINIMIZED_SIZE.height));
+        setMinimized(true);
+      }
+    } catch (e) {
+      console.error('Failed to resize widget:', e);
+      // Still toggle UI state even if resize fails
+      setMinimized((prev) => !prev);
+    }
+  }, [minimized]);
 
   // Use refetchInterval to keep widget data in sync with main app
   const { data: plan } = useQuery({
@@ -260,14 +287,53 @@ export function PlannerWidget() {
       : 'text-foreground';
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 40, scale: 0.96 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 40, scale: 0.96 }}
-      transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-      className="h-screen w-screen bg-background/[0.97] backdrop-blur-2xl border border-border/40 rounded-xl overflow-hidden flex flex-col"
-      style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08)' }}
-    >
+    <AnimatePresence mode="wait">
+      {minimized ? (
+        /* ── Minimized: sakura ball ── */
+        <motion.div
+          key="minimized"
+          initial={{ opacity: 0, scale: 0.3 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.3 }}
+          transition={{ type: 'spring', damping: 20, stiffness: 400 }}
+          onMouseDown={handleStartDrag}
+          className="h-screen w-screen flex items-center justify-center cursor-grab active:cursor-grabbing"
+        >
+          <motion.button
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={toggleMinimize}
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.9 }}
+            className="relative w-11 h-11 rounded-full bg-gradient-to-br from-pink-400 via-rose-300 to-pink-200 flex items-center justify-center border border-white/20"
+            title="Expand Bloom"
+          >
+            <span className="text-lg select-none drop-shadow-sm">🌸</span>
+            {/* Active indicator dot */}
+            {activeInfo.isActive && (
+              <motion.div
+                animate={{ scale: [1, 1.3, 1] }}
+                transition={{ repeat: Infinity, duration: 1.5 }}
+                className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 rounded-full border border-white/60"
+              />
+            )}
+            {/* Badge: completed count */}
+            {totalCount > 0 && (
+              <div className="absolute -bottom-0.5 -right-0.5 min-w-[14px] h-[14px] bg-primary text-primary-foreground text-[8px] font-bold rounded-full flex items-center justify-center px-0.5 border border-white/60">
+                {completedCount}/{totalCount}
+              </div>
+            )}
+          </motion.button>
+        </motion.div>
+      ) : (
+        /* ── Full widget ── */
+        <motion.div
+          key="expanded"
+          initial={{ opacity: 0, x: 40, scale: 0.96 }}
+          animate={{ opacity: 1, x: 0, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.5 }}
+          transition={{ type: 'spring', damping: 28, stiffness: 350 }}
+          className="h-screen w-screen bg-background/[0.97] backdrop-blur-2xl border border-border/40 rounded-xl overflow-hidden flex flex-col"
+        >
       {/* Header: drag + branding + actions */}
       <div
         onMouseDown={handleStartDrag}
@@ -277,7 +343,14 @@ export function PlannerWidget() {
           <span className="text-sm">🌸</span>
           <span className="text-[11px] font-semibold text-foreground/80">Bloom</span>
         </div>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5" onMouseDown={(e) => e.stopPropagation()}>
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleMinimize(); }}
+            className="p-1 rounded-md hover:bg-muted/60 transition-colors"
+            title="Minimize"
+          >
+            <Minus className="w-3 h-3 text-muted-foreground" />
+          </button>
           <button
             onClick={(e) => { e.stopPropagation(); openQuickCaptureWidget(); }}
             className="p-1 rounded-md hover:bg-muted/60 transition-colors"
@@ -609,5 +682,7 @@ export function PlannerWidget() {
         )}
       </AnimatePresence>
     </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

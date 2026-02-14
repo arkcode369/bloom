@@ -81,7 +81,6 @@ export function QuickCaptureWidget() {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: 'spring', damping: 28, stiffness: 350 }}
       className="h-screen w-screen bg-background/[0.97] backdrop-blur-2xl border border-border/40 rounded-xl overflow-hidden flex flex-col"
-      style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08)' }}
     >
       {/* Header */}
       <div
@@ -94,6 +93,7 @@ export function QuickCaptureWidget() {
         </div>
         <button
           onClick={handleClose}
+          onMouseDown={(e) => e.stopPropagation()}
           className="p-1 rounded-md hover:bg-muted/60 transition-colors"
         >
           <X className="w-3 h-3 text-muted-foreground" />
