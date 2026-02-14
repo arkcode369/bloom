@@ -19,6 +19,11 @@ import {
   Keyboard,
   Leaf,
   Command,
+  Calendar,
+  Clock,
+  Zap,
+  FileCode,
+  Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -53,6 +58,34 @@ export default function HelpPanel({ open, onOpenChange }: HelpPanelProps) {
       tip: t('help.graph_tip'),
     },
     {
+      id: 'planner',
+      icon: <Calendar className="h-5 w-5 text-blue-500" />,
+      title: t('help.planner_title'),
+      description: t('help.planner_desc'),
+      tip: t('help.planner_tip'),
+    },
+    {
+      id: 'writing',
+      icon: <Activity className="h-5 w-5 text-rose-500" />,
+      title: t('help.writing_title'),
+      description: t('help.writing_desc'),
+      tip: t('help.writing_tip'),
+    },
+    {
+      id: 'quick-capture',
+      icon: <Zap className="h-5 w-5 text-amber-500" />,
+      title: t('help.quick_capture_title'),
+      description: t('help.quick_capture_desc'),
+      tip: t('help.quick_capture_tip'),
+    },
+    {
+      id: 'templates',
+      icon: <FileCode className="h-5 w-5 text-cyan-500" />,
+      title: t('help.templates_title'),
+      description: t('help.templates_desc'),
+      tip: t('help.templates_tip'),
+    },
+    {
       id: 'starred',
       icon: <Star className="h-5 w-5 text-amber-400" />,
       title: t('help.starred_title'),
@@ -61,7 +94,7 @@ export default function HelpPanel({ open, onOpenChange }: HelpPanelProps) {
     },
     {
       id: 'search',
-      icon: <Search className="h-5 w-5 text-blue-500" />,
+      icon: <Search className="h-5 w-5 text-indigo-500" />,
       title: t('help.search_title'),
       description: t('help.search_desc'),
       tip: t('help.search_tip'),

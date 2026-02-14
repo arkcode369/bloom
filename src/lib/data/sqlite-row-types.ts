@@ -153,3 +153,12 @@ export interface TimeBlockRow {
     color: string;
     created_at: string;
 }
+
+export interface DailyWritingStatRow {
+    id: string;
+    user_id: string;
+    date: string;
+    total_words: number;
+    created_at: string;
+    updated_at: string;
+}

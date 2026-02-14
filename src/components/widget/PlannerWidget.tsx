@@ -9,6 +9,7 @@ import { useDataAdapter } from '@/lib/data/DataProvider';
 import { useCreateTarget, useUpdateTarget } from '@/hooks/usePlanning';
 import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { TargetStatus, Note } from '@/lib/data/types';
+import { extractPlainText } from '@/components/editor/blockUtils';
 
 const WIDGET_FULL_SIZE = { width: 280, height: 400 };
 const WIDGET_MINIMIZED_SIZE = { width: 52, height: 52 };
@@ -118,6 +119,24 @@ function formatTimeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
+// Helper to convert note content to plain text for widget display
+function contentToPlainText(content: string | null): string {
+  if (!content) return '';
+  
+  try {
+    const parsed = JSON.parse(content);
+    if (Array.isArray(parsed)) {
+      // It's BlockNote JSON format - extract plain text
+      return extractPlainText(parsed);
+    }
+  } catch {
+    // Not JSON or parsing failed - treat as plain text
+    return content;
+  }
+  
+  return content;
+}
+
 export function PlannerWidget() {
   const { t } = useTranslation();
   const activeInfo = useActiveTimeBlock();
@@ -224,7 +243,7 @@ export function PlannerWidget() {
       // Open inline editor
       setEditingNote(note);
       setEditTitle(note.title);
-      setEditContent(note.content || '');
+      setEditContent(''); // Empty content, no conversion needed
     } catch (e) {
       console.error('Failed to create note:', e);
     } finally {
@@ -235,7 +254,8 @@ export function PlannerWidget() {
   const openNoteInline = (note: Note) => {
     setEditingNote(note);
     setEditTitle(note.title);
-    setEditContent(note.content || '');
+    // Convert BlockNote JSON to plain text for widget textarea
+    setEditContent(contentToPlainText(note.content));
   };
 
   const closeNoteEditor = () => {

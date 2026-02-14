@@ -46,7 +46,8 @@
     "use_wikilinks": "Use [[wikilinks]] to connect ideas",
     "create_first_note": "Create your first note",
     "organize_garden": "Organize your garden!",
-    "create_tags_hint": "Create tags to group related notes into knowledge domains"
+    "create_tags_hint": "Create tags to group related notes into knowledge domains",
+    "writing_activity": "Writing Activity"
   },
   "search": {
     "placeholder": "Search notes by title or content...",
@@ -88,7 +89,9 @@
     "goal_reached": "Goal reached!",
     "show_word_count": "Show Word Count",
     "show_reading_time": "Show Reading Time",
-    "today": "Today"
+    "today": "Today",
+    "activity_calendar": "Writing Activity",
+    "activity_calendar_desc": "Your daily writing activity over the past 12 months"
   },
   "settings": {
     "title": "Settings",
@@ -268,14 +271,26 @@
     "tags_title": "Tags",
     "tags_desc": "Organize notes into knowledge domains using tags. Create categories like Projects, Ideas, or Research to keep your garden tidy.",
     "tags_tip": "Click the tag icon in any note to add or create tags.",
-    "graph_title": "Graph View",
-    "graph_desc": "Visualize all your note connections as an interactive graph. See how your ideas connect and discover new relationships.",
-    "graph_tip": "Press Ctrl+G to open Graph View anytime.",
+    "graph_title": "Knowledge Graph",
+    "graph_desc": "Visualize all your note connections with an interactive 3D graph. Features Hebbian learning to strengthen frequently accessed connections.",
+    "graph_tip": "Press Ctrl+G to open Graph View. Click nodes to navigate!",
+    "planner_title": "Daily Planner",
+    "planner_desc": "Plan your day with time blocks, set targets, and track progress. Create schedules, manage tasks, and review your daily achievements.",
+    "planner_tip": "Use time blocks to structure your day and set daily targets to stay focused.",
+    "writing_title": "Writing Activity",
+    "writing_desc": "Track your daily word count with GitHub-style activity calendar. Set daily goals and see your writing streak visualized over time.",
+    "writing_tip": "View your writing heatmap on the home page to stay motivated!",
+    "quick_capture_title": "Quick Capture",
+    "quick_capture_desc": "Capture ideas instantly with a floating quick capture widget. Press Alt+Shift+N anywhere on your system to open it.",
+    "quick_capture_tip": "Enable 'Quick Capture as Widget' in Widget settings for always-on-top capture window.",
+    "templates_title": "Note Templates",
+    "templates_desc": "Use pre-built templates for common note types: daily notes, weekly reviews, meeting notes, and more. Save time with consistent structure.",
+    "templates_tip": "Access templates from the sidebar or use slash commands (/) in the editor.",
     "starred_title": "Starred Notes",
     "starred_desc": "Mark your most important notes with a star for quick access. Perfect for frequently referenced notes or current projects.",
     "starred_tip": "Click the star icon in any note to toggle.",
     "search_title": "Quick Search",
-    "search_desc": "Find any note instantly with powerful search. Search by title, content, or tags to locate what you need.",
+    "search_desc": "Find any note instantly with powerful full-text search. Search by title, content, or tags with FTS5 indexing for speed.",
     "search_tip": "Press Ctrl+K for lightning-fast search.",
     "command_palette": "Command Palette",
     "command_palette_desc": "Press Ctrl+K to access all commands, quick navigation, and actions in one place."
@@ -287,7 +302,13 @@
     "organize_garden": "Organize your garden",
     "organize_garden_desc": "Use tags to create knowledge domains. Group related notes and find them faster when you need them.",
     "watch_grow": "Watch your garden grow",
-    "watch_grow_desc": "Open Graph View (Ctrl+G) to see all your note connections visualized. Discover hidden patterns in your thinking!"
+    "watch_grow_desc": "Open Graph View (Ctrl+G) to see all your note connections visualized. Discover hidden patterns in your thinking!",
+    "daily_planner": "Plan your day",
+    "daily_planner_desc": "Use the Daily Planner to create time blocks and set targets. Structure your day and track progress in real-time.",
+    "track_progress": "Track your progress",
+    "track_progress_desc": "Your writing activity is automatically tracked. Check the home page to see your daily word count heatmap!",
+    "quick_capture": "Capture ideas instantly",
+    "quick_capture_desc": "Press Alt+Shift+N anywhere to open quick capture. Never lose a thought again!"
   },
   "list": {
     "search_notes": "Search notes...",

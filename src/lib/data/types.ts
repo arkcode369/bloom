@@ -171,6 +171,26 @@ export interface DailyPlanWithDetails extends DailyPlan {
   completionRate: number;
 }
 
+// ============= Writing Stats =============
+
+export interface DailyWritingStat {
+  id: string;
+  user_id: string;
+  date: string;
+  total_words: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateDailyWritingStatInput {
+  date: string;
+  total_words: number;
+}
+
+export interface UpdateDailyWritingStatInput {
+  total_words: number;
+}
+
 export type AvatarStyle = 'beam' | 'marble' | 'pixel' | 'sunset' | 'ring' | 'bauhaus';
 
 // ============= Input Types =============
@@ -332,6 +352,13 @@ export interface DataAdapter {
     createTimeBlock(input: CreateTimeBlockInput): Promise<TimeBlock>;
     updateTimeBlock(id: string, input: UpdateTimeBlockInput): Promise<TimeBlock>;
     deleteTimeBlock(id: string): Promise<void>;
+  };
+
+  // ============= Writing Stats =============
+  writingStats: {
+    getByDate(date: string): Promise<DailyWritingStat | null>;
+    getInRange(startDate: string, endDate: string): Promise<DailyWritingStat[]>;
+    upsert(input: CreateDailyWritingStatInput): Promise<DailyWritingStat>;
   };
 }
 

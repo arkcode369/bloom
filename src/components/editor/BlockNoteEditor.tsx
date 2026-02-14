@@ -197,6 +197,7 @@ export default function BlockNoteEditorComponent({
             const items = getWikilinkMenuItems(query);
             return items.map((item) => ({
               title: item.title,
+              key: item.noteId || `create-${item.title}`, // Unique key to prevent React warnings
               onItemClick: () => {
                 insertWikilink(item.title);
               },

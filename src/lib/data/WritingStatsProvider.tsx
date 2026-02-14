@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import { useDataAdapter } from './DataProvider';
 
 interface DailyWritingStats {
     date: string;
@@ -41,6 +42,8 @@ function getTodayKey(): string {
 }
 
 export function WritingStatsProvider({ children }: { children: ReactNode }) {
+    const adapter = useDataAdapter();
+    
     const [dailyStats, setDailyStats] = useState<DailyWritingStats>(() => {
         if (typeof window !== 'undefined') {
             const stored = localStorage.getItem(STORAGE_KEY);
@@ -69,10 +72,28 @@ export function WritingStatsProvider({ children }: { children: ReactNode }) {
         return defaultPreferences;
     });
 
-    // Persist daily stats
+    // Persist daily stats to localStorage
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(dailyStats));
     }, [dailyStats]);
+
+    // Persist daily stats to database (debounced)
+    useEffect(() => {
+        const timer = setTimeout(async () => {
+            if (dailyStats.totalWords > 0) {
+                try {
+                    await adapter.writingStats.upsert({
+                        date: dailyStats.date,
+                        total_words: dailyStats.totalWords,
+                    });
+                } catch (err) {
+                    console.error('Failed to persist writing stats:', err);
+                }
+            }
+        }, 2000); // Debounce 2s to avoid excessive DB writes
+
+        return () => clearTimeout(timer);
+    }, [dailyStats.totalWords, dailyStats.date, adapter]);
 
     // Persist preferences
     useEffect(() => {

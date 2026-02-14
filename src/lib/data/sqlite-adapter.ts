@@ -33,6 +33,8 @@ import type {
   TargetPriority,
   TargetType,
   TimeBlockType,
+  DailyWritingStat,
+  CreateDailyWritingStatInput,
 } from './types';
 import type {
   NoteRow,
@@ -51,6 +53,7 @@ import type {
   DailyPlanRow,
   TargetRow,
   TimeBlockRow,
+  DailyWritingStatRow,
 } from './sqlite-row-types';
 import {
   initDatabase,
@@ -149,6 +152,17 @@ function mapRowToTimeBlock(row: TimeBlockRow): TimeBlock {
   };
 }
 
+function mapRowToDailyWritingStat(row: DailyWritingStatRow): DailyWritingStat {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    date: row.date,
+    total_words: row.total_words,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
 const NOTE_COLUMNS = 'id, user_id, title, content, cover_image, is_starred, is_archived, is_pinned, created_at, updated_at';
 
 export function createSQLiteAdapter(): DataAdapter {
@@ -181,21 +195,22 @@ export function createSQLiteAdapter(): DataAdapter {
       async deleteAccount(): Promise<AuthResult> {
         try {
           const db = await ensureDb();
-          await db.execute('BEGIN TRANSACTION');
-          try {
-            await db.execute('DELETE FROM note_tags');
-            await db.execute('DELETE FROM links');
-            await db.execute('DELETE FROM edge_interactions');
-            await db.execute('DELETE FROM note_access_log');
-            await db.execute('DELETE FROM notes');
-            await db.execute('DELETE FROM tags');
-            await db.execute('DELETE FROM profiles');
-            await db.execute('COMMIT');
-            return { error: null };
-          } catch (innerErr) {
-            await db.execute('ROLLBACK');
-            throw innerErr;
-          }
+          
+          // Execute deletes sequentially without manual transaction
+          // SQLite will handle constraints and the operations are fast enough
+          await db.execute('DELETE FROM note_tags');
+          await db.execute('DELETE FROM links');
+          await db.execute('DELETE FROM edge_interactions');
+          await db.execute('DELETE FROM note_access_log');
+          await db.execute('DELETE FROM targets');
+          await db.execute('DELETE FROM time_blocks');
+          await db.execute('DELETE FROM daily_plans');
+          await db.execute('DELETE FROM daily_writing_stats');
+          await db.execute('DELETE FROM notes');
+          await db.execute('DELETE FROM tags');
+          await db.execute('DELETE FROM profiles');
+          
+          return { error: null };
         } catch (err) {
           console.error('Delete account failed:', err);
           return { error: err as Error };
@@ -775,7 +790,7 @@ export function createSQLiteAdapter(): DataAdapter {
           return { added: 0, removed: 0 };
         }
 
-        await db.execute('BEGIN TRANSACTION');
+        // Execute operations sequentially
         try {
           for (const note of toAdd) {
             const id = generateUUID();
@@ -789,10 +804,7 @@ export function createSQLiteAdapter(): DataAdapter {
           for (const link of toRemove) {
             await db.execute('DELETE FROM links WHERE id = ?', [link.id]);
           }
-
-          await db.execute('COMMIT');
         } catch (err) {
-          await db.execute('ROLLBACK');
           console.error('Failed to sync links:', err);
           throw err;
         }
@@ -808,7 +820,7 @@ export function createSQLiteAdapter(): DataAdapter {
         const linkId = generateUUID();
         const now = getCurrentTimestamp();
 
-        await db.execute('BEGIN TRANSACTION');
+        // Execute operations sequentially
         try {
           await db.execute(
             `INSERT INTO notes (id, user_id, title, content, created_at, updated_at) 
@@ -820,10 +832,7 @@ export function createSQLiteAdapter(): DataAdapter {
             'INSERT INTO links (id, source_note_id, target_note_id, user_id, created_at) VALUES (?, ?, ?, ?, ?)',
             [linkId, sourceNoteId, noteId, userId, now]
           );
-
-          await db.execute('COMMIT');
         } catch (err) {
-          await db.execute('ROLLBACK');
           console.error('Failed to create note from link:', err);
           throw err;
         }
@@ -1238,19 +1247,21 @@ export function createSQLiteAdapter(): DataAdapter {
 
       async reorderTargets(dailyPlanId: string, orderedIds: string[]): Promise<void> {
         const db = await ensureDb();
-        await db.execute('BEGIN TRANSACTION');
-        try {
-          for (let i = 0; i < orderedIds.length; i++) {
-            await db.execute(
-              'UPDATE targets SET sort_order = ?, updated_at = ? WHERE id = ? AND daily_plan_id = ?',
-              [i, getCurrentTimestamp(), orderedIds[i], dailyPlanId]
-            );
-          }
-          await db.execute('COMMIT');
-        } catch (err) {
-          await db.execute('ROLLBACK');
-          throw err;
-        }
+        const now = getCurrentTimestamp();
+        
+        // Build CASE statement for batch update
+        const caseStatements = orderedIds
+          .map((id, index) => `WHEN id = '${id}' THEN ${index}`)
+          .join(' ');
+        
+        await db.execute(
+          `UPDATE targets 
+           SET sort_order = CASE ${caseStatements} END,
+               updated_at = ?
+           WHERE id IN (${orderedIds.map(() => '?').join(',')}) 
+             AND daily_plan_id = ?`,
+          [now, ...orderedIds, dailyPlanId]
+        );
       },
 
       async getTimeBlocks(dailyPlanId: string): Promise<TimeBlock[]> {
@@ -1321,6 +1332,66 @@ export function createSQLiteAdapter(): DataAdapter {
       async deleteTimeBlock(id: string): Promise<void> {
         const db = await ensureDb();
         await db.execute('DELETE FROM time_blocks WHERE id = ?', [id]);
+      },
+    },
+
+    writingStats: {
+      async getByDate(date: string): Promise<DailyWritingStat | null> {
+        const userId = ensureUserId();
+        const db = await ensureDb();
+        const result = await db.select<DailyWritingStatRow[]>(
+          'SELECT * FROM daily_writing_stats WHERE user_id = ? AND date = ?',
+          [userId, date]
+        );
+        return result.length > 0 ? mapRowToDailyWritingStat(result[0]) : null;
+      },
+
+      async getInRange(startDate: string, endDate: string): Promise<DailyWritingStat[]> {
+        const userId = ensureUserId();
+        const db = await ensureDb();
+        const result = await db.select<DailyWritingStatRow[]>(
+          'SELECT * FROM daily_writing_stats WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date ASC',
+          [userId, startDate, endDate]
+        );
+        return result.map(mapRowToDailyWritingStat);
+      },
+
+      async upsert(input: CreateDailyWritingStatInput): Promise<DailyWritingStat> {
+        const userId = ensureUserId();
+        const db = await ensureDb();
+        
+        // Check if entry exists
+        const existing = await db.select<DailyWritingStatRow[]>(
+          'SELECT * FROM daily_writing_stats WHERE user_id = ? AND date = ?',
+          [userId, input.date]
+        );
+
+        const now = getCurrentTimestamp();
+
+        if (existing.length > 0) {
+          // Update existing
+          await db.execute(
+            'UPDATE daily_writing_stats SET total_words = ?, updated_at = ? WHERE id = ?',
+            [input.total_words, now, existing[0].id]
+          );
+          const result = await db.select<DailyWritingStatRow[]>(
+            'SELECT * FROM daily_writing_stats WHERE id = ?',
+            [existing[0].id]
+          );
+          return mapRowToDailyWritingStat(result[0]);
+        } else {
+          // Insert new
+          const id = generateUUID();
+          await db.execute(
+            'INSERT INTO daily_writing_stats (id, user_id, date, total_words, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+            [id, userId, input.date, input.total_words, now, now]
+          );
+          const result = await db.select<DailyWritingStatRow[]>(
+            'SELECT * FROM daily_writing_stats WHERE id = ?',
+            [id]
+          );
+          return mapRowToDailyWritingStat(result[0]);
+        }
       },
     },
   };

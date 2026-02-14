@@ -64,9 +64,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteWorkspace = async () => {
+    // Cancel all queries and wait for connections to settle
+    queryClient.cancelQueries();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     const result = await adapter.auth.deleteAccount();
     if (!result.error) {
       queryClient.clear();
+      
+      // Clear localStorage data
+      localStorage.removeItem('bloom_v1_writing_stats');
+      localStorage.removeItem('bloom_v1_writing_prefs');
+      localStorage.removeItem('bloom_v1_preferences');
+      localStorage.removeItem('bloom_v1_onboarded');
+      
       setIsOnboarded(false);
       setUser(null);
     }

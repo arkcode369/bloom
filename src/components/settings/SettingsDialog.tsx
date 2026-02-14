@@ -229,15 +229,6 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
                 </Button>
               </div>
             </section>
-
-            <Separator />
-
-            <section className="space-y-2">
-              <h3 className="text-sm font-medium">{t('settings.about')}</h3>
-              <p className="text-sm text-muted-foreground">
-                Bloom v1.0 — Personal Knowledge Management
-              </p>
-            </section>
           </div>
         );
 
@@ -611,7 +602,7 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
                 </div>
               </div>
               <p className="text-sm text-muted-foreground">
-                Personal knowledge management with bidirectional links, knowledge graph visualization, and offline-first architecture.
+                Your personal knowledge garden with bidirectional linking, intelligent knowledge graphs, daily planning with time blocks, writing activity tracking, quick capture widget, note templates, and offline-first architecture. Features automatic updates and seamless data export/import.
               </p>
             </section>
 
@@ -768,14 +759,16 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
               <Trash2 className="h-5 w-5" />
               {t('settings.reset_workspace')}
             </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-3 text-foreground">
-              <p>{t('settings.reset_warning')}</p>
-              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground/80">
-                <li>{t('settings.reset_list_notes')}</li>
-                <li>{t('settings.reset_list_tags')}</li>
-                <li>{t('settings.reset_list_links')}</li>
-                <li>{t('settings.reset_list_profile')}</li>
-              </ul>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-foreground">
+                <p>{t('settings.reset_warning')}</p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground/80">
+                  <li>{t('settings.reset_list_notes')}</li>
+                  <li>{t('settings.reset_list_tags')}</li>
+                  <li>{t('settings.reset_list_links')}</li>
+                  <li>{t('settings.reset_list_profile')}</li>
+                </ul>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="my-4">

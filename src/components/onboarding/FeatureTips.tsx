@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { X, Lightbulb, Link2, Tag, Network, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Lightbulb, Link2, Tag, Network, ChevronLeft, ChevronRight, Calendar, Activity, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -38,6 +38,25 @@ export default function FeatureTips() {
       icon: <Network className="h-5 w-5 text-purple-500" />,
       title: t('tips.watch_grow'),
       description: t('tips.watch_grow_desc'),
+    },
+    {
+      id: 'planner',
+      icon: <Calendar className="h-5 w-5 text-blue-500" />,
+      title: t('tips.daily_planner'),
+      description: t('tips.daily_planner_desc'),
+    },
+    {
+      id: 'writing',
+      icon: <Activity className="h-5 w-5 text-rose-500" />,
+      title: t('tips.track_progress'),
+      description: t('tips.track_progress_desc'),
+    },
+    {
+      id: 'quick-capture',
+      icon: <Zap className="h-5 w-5 text-amber-500" />,
+      title: t('tips.quick_capture'),
+      description: t('tips.quick_capture_desc'),
+      example: 'Alt+Shift+N',
     },
   ];
 

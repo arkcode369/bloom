@@ -45,7 +45,8 @@
     "use_wikilinks": "[[ウィキリンク]]でアイデアをつなげよう",
     "create_first_note": "最初のノートを作成",
     "organize_garden": "庭を整理しましょう！",
-    "create_tags_hint": "タグを作成して関連ノートをグループ化"
+    "create_tags_hint": "タグを作成して関連ノートをグループ化",
+    "writing_activity": "執筆活動"
   },
   "search": {
     "placeholder": "タイトルまたは内容でノートを検索...",
@@ -87,7 +88,9 @@
     "goal_reached": "目標達成！",
     "show_word_count": "文字数を表示",
     "show_reading_time": "読了時間を表示",
-    "today": "今日"
+    "today": "今日",
+    "activity_calendar": "執筆活動",
+    "activity_calendar_desc": "過去12ヶ月間の日々の執筆活動"
   },
   "settings": {
     "title": "設定",
@@ -263,17 +266,29 @@
     "tags_title": "タグ",
     "tags_desc": "タグでノートを整理。プロジェクト、アイデア、リサーチなどのカテゴリを作成。",
     "tags_tip": "ノートのタグアイコンをクリックしてタグを追加・作成。",
-    "graph_title": "グラフビュー",
-    "graph_desc": "すべてのノートの接続をインタラクティブなグラフで可視化。隠れたパターンを発見！",
-    "graph_tip": "⌘G でグラフビューを開く。",
+    "graph_title": "ナレッジグラフ",
+    "graph_desc": "インタラクティブな3Dグラフですべてのノート接続を可視化。ヘッブ学習で頻繁にアクセスされる接続を強化。",
+    "graph_tip": "Ctrl+G でグラフビューを開く。ノードをクリックして移動！",
+    "planner_title": "デイリープランナー",
+    "planner_desc": "タイムブロックで1日を計画し、目標を設定し、進捗を追跡。スケジュール作成、タスク管理、毎日の達成をレビュー。",
+    "planner_tip": "タイムブロックで1日を構造化し、毎日の目標を設定して集中力を維持。",
+    "writing_title": "執筆活動",
+    "writing_desc": "GitHubスタイルの活動カレンダーで毎日の単語数を追跡。毎日の目標を設定し、執筆ストリークを可視化。",
+    "writing_tip": "ホームページで執筆ヒートマップを見てモチベーションを維持！",
+    "quick_capture_title": "クイックキャプチャ",
+    "quick_capture_desc": "フローティングクイックキャプチャウィジェットでアイデアを即座にキャプチャ。システムのどこからでもAlt+Shift+Nで開く。",
+    "quick_capture_tip": "ウィジェット設定で「クイックキャプチャをウィジェットとして」を有効にすると、常に最前面のキャプチャウィンドウが表示されます。",
+    "templates_title": "ノートテンプレート",
+    "templates_desc": "一般的なノートタイプ用の既製テンプレートを使用：デイリーノート、ウィークリーレビュー、会議メモなど。一貫した構造で時間を節約。",
+    "templates_tip": "サイドバーからテンプレートにアクセスするか、エディターでスラッシュコマンド（/）を使用。",
     "starred_title": "スター付きノート",
     "starred_desc": "重要なノートにスターを付けて素早くアクセス。よく参照するノートに最適。",
     "starred_tip": "ノートのスターアイコンをクリックして切り替え。",
     "search_title": "クイック検索",
-    "search_desc": "強力な検索で瞬時にノートを発見。タイトル、内容、タグで検索。",
-    "search_tip": "⌘K で高速検索。",
+    "search_desc": "強力なフルテキスト検索で瞬時にノートを発見。FTS5インデックスでタイトル、内容、タグで高速検索。",
+    "search_tip": "Ctrl+K で高速検索。",
     "command_palette": "コマンドパレット",
-    "command_palette_desc": "⌘K ですべてのコマンド、ナビゲーション、アクションにアクセス。"
+    "command_palette_desc": "Ctrl+K ですべてのコマンド、ナビゲーション、アクションにアクセス。"
   },
   "tips": {
     "pro_tip": "プロのヒント",
@@ -282,7 +297,13 @@
     "organize_garden": "庭を整理",
     "organize_garden_desc": "タグで知識ドメインを作成。関連ノートをグループ化。",
     "watch_grow": "庭の成長を見る",
-    "watch_grow_desc": "グラフビュー（⌘G）ですべてのノート接続を可視化。隠れたパターンを発見！"
+    "watch_grow_desc": "グラフビュー（Ctrl+G）ですべてのノート接続を可視化。隠れたパターンを発見！",
+    "daily_planner": "1日を計画",
+    "daily_planner_desc": "デイリープランナーを使用してタイムブロックを作成し、目標を設定。1日を構造化し、リアルタイムで進捗を追跡。",
+    "track_progress": "進捗を追跡",
+    "track_progress_desc": "執筆活動は自動的に追跡されます。ホームページで毎日の単語数ヒートマップを確認！",
+    "quick_capture": "アイデアを即座にキャプチャ",
+    "quick_capture_desc": "どこからでもAlt+Shift+Nを押してクイックキャプチャを開く。もう思考を失うことはありません！"
   },
   "list": {
     "search_notes": "ノートを検索...",

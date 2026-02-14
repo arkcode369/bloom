@@ -18,11 +18,13 @@ import {
   ArrowRight,
   Leaf,
   Link2,
+  Calendar,
 } from 'lucide-react';
 import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import FeatureTips from '@/components/onboarding/FeatureTips';
+import { ActivityCalendar } from '@/components/profile/ActivityCalendar';
 
 interface HomePageProps {
   onCreateNote: () => void;
@@ -323,6 +325,21 @@ export default function HomePage({
                     <span className="text-sm">{t('home.your_knowledge_growing')}</span>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Writing Activity Calendar */}
+          <motion.div variants={itemVariants} className="md:col-span-2">
+            <Card className="border-muted/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-medium flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  {t('home.writing_activity')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <ActivityCalendar compact />
               </CardContent>
             </Card>
           </motion.div>

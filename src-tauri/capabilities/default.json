@@ -32,6 +32,9 @@
     "fs:allow-document-write-recursive",
     "fs:allow-home-read-recursive",
     "fs:allow-home-write-recursive",
+    "fs:allow-write-file",
+    "fs:allow-mkdir",
+    "fs:allow-read-file",
     "dialog:allow-open",
     "dialog:allow-save",
     "dialog:allow-confirm",
@@ -51,5 +54,6 @@
     "updater:default",
     "process:allow-restart",
     "process:allow-exit"
-  ]
+  ],
+  "platforms": ["windows", "linux", "macOS"]
 }

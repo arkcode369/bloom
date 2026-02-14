@@ -164,7 +164,19 @@ const SCHEMA_SQL = [
   `CREATE INDEX IF NOT EXISTS idx_targets_plan ON targets(daily_plan_id)`,
   `CREATE INDEX IF NOT EXISTS idx_targets_status ON targets(status)`,
   `CREATE INDEX IF NOT EXISTS idx_time_blocks_plan ON time_blocks(daily_plan_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_time_blocks_target ON time_blocks(target_id)`
+  `CREATE INDEX IF NOT EXISTS idx_time_blocks_target ON time_blocks(target_id)`,
+  // Writing Stats for Activity Calendar
+  `CREATE TABLE IF NOT EXISTS daily_writing_stats (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'local-user',
+    date TEXT NOT NULL,
+    total_words INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(user_id, date)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_daily_writing_stats_date ON daily_writing_stats(date)`,
+  `CREATE INDEX IF NOT EXISTS idx_daily_writing_stats_user ON daily_writing_stats(user_id)`
 ];
 
 // ============= Database Manager =============
@@ -339,6 +351,22 @@ export async function initDatabase(): Promise<Database> {
     await db.execute('UPDATE schema_version SET version = 6');
     console.log('✅ Migration to version 6 complete');
     currentVersion = 6;
+  }
+
+  if (currentVersion < 7) {
+    console.log('🔄 Migrating database to version 7 (Writing Stats Calendar)...');
+
+    const writingStatsStatements = SCHEMA_SQL.filter(sql =>
+      sql.includes('daily_writing_stats')
+    );
+    for (const sql of writingStatsStatements) {
+      await db.execute(sql);
+      console.log('✅ Executed:', sql.split('CREATE TABLE')[1]?.split('(')[0]?.trim());
+    }
+
+    await db.execute('UPDATE schema_version SET version = 7');
+    console.log('✅ Migration to version 7 complete');
+    currentVersion = 7;
   }
 
   isInitialized = true;

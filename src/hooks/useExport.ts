@@ -113,16 +113,11 @@ function sanitizeFilename(name: string): string {
 
 async function writeNativeFile(filename: string, content: string, defaultPath: string | null) {
     try {
-        let path: string | null = null;
-
-        if (defaultPath) {
-            path = await join(defaultPath, filename);
-        } else {
-            path = await save({
-                defaultPath: filename,
-                title: 'Save File',
-            });
-        }
+        // Always use dialog save to avoid scope permission issues with arbitrary paths
+        const path = await save({
+            defaultPath: defaultPath ? await join(defaultPath, filename) : filename,
+            title: 'Save File',
+        });
 
         if (path) {
             const encoder = new TextEncoder();
@@ -227,14 +222,15 @@ export function useExportWorkspace() {
                 return;
             }
 
-            let targetFolder = preferences.storage.exportPath;
-
-            // Prompt for directory if no default set
-            if (!targetFolder && window && (window as any).__TAURI_INTERNALS__) {
+            // Always prompt for directory to avoid scope permission issues
+            let targetFolder: string | null = null;
+            
+            if (window && (window as any).__TAURI_INTERNALS__) {
                 const selected = await openDialog({
                     directory: true,
                     multiple: false,
                     title: 'Select Export Directory',
+                    defaultPath: preferences.storage.exportPath || undefined,
                 });
                 if (selected && typeof selected === 'string') {
                     targetFolder = selected;
