@@ -33,12 +33,12 @@
       "endpoints": [
         "https://github.com/srikresna/bloom-brain/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFCOTdFRDA0Mzk4NThGNDQKUldSRWo0VTVCTzJYcTFoRnFWUjI3Uzh0aENvOUN2dTJzTDV2SVBOeHM2RHNjdVlWUFREM21XQUcK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU3M0Y2NzJGRUYwNTg5MDIKUldRQ2lRWHZMMmMvVjJhcnZ0NFBFT3I0b0pzbFh6Wmg1MHplVDB5aWxNOXVReHBocjZyZzErNEcK"
     }
   },
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": false,
+    "createUpdaterArtifacts": true,
     "targets": [
       "nsis",
       "msi"
