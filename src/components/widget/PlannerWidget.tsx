@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, Circle, PlayCircle, SkipForward, Plus, Timer, ExternalLink, Pencil, FileText, ChevronRight, ArrowLeft, Minus } from 'lucide-react';
+import { CheckCircle2, Circle, PlayCircle, SkipForward, Plus, Timer, ExternalLink, Pencil, FileText, ChevronRight, ArrowLeft, Minus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { useActiveTimeBlock } from '@/hooks/useActiveTimeBlock';
@@ -364,6 +364,13 @@ export function PlannerWidget() {
             title="Open Bloom"
           >
             <ExternalLink className="w-3 h-3 text-muted-foreground" />
+          </button>
+          <button
+            onClick={async (e) => { e.stopPropagation(); try { await getCurrentWebviewWindow().close(); } catch { /* ignore */ } }}
+            className="p-1 rounded-md hover:bg-destructive/20 transition-colors"
+            title="Close Widget"
+          >
+            <X className="w-3 h-3 text-muted-foreground" />
           </button>
         </div>
       </div>

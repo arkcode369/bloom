@@ -53,12 +53,19 @@ export default function KnowledgeGraph({
     return map;
   }, [notes]);
 
-  // Initialize visible tags when data loads
+  // Stable key for all tag IDs — only changes when tags are actually added/removed
+  const allTagIdsKey = useMemo(() => {
+    if (!graphData?.allTags) return '';
+    return graphData.allTags.map(t => t.id).sort().join(',');
+  }, [graphData?.allTags]);
+
+  // Initialize visible tags when data loads — only when tag set actually changes
   useEffect(() => {
-    if (graphData?.allTags) {
+    if (graphData?.allTags && graphData.allTags.length > 0) {
       setVisibleTags(new Set(graphData.allTags.map(t => t.id)));
     }
-  }, [graphData?.allTags]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allTagIdsKey]);
 
   const toggleTag = useCallback((tagId: string) => {
     setVisibleTags(prev => {
@@ -84,6 +91,95 @@ export default function KnowledgeGraph({
     setFocusNodeId(null);
   }, []);
 
+  // Use refs for values that should NOT trigger simulation restart
+  const selectedNoteIdRef = useRef(selectedNoteId);
+  const noteContentsRef = useRef(noteContents);
+  const hoveredNodeIdRef = useRef(hoveredNodeId);
+  const activationEnabledRef = useRef(activationEnabled);
+  const focusNodeIdRef = useRef(focusNodeId);
+  const showDomainsRef = useRef(showDomains);
+  const visibleTagsRef = useRef(visibleTags);
+  const onSelectNoteRef = useRef(onSelectNote);
+
+  // Keep refs in sync
+  useEffect(() => { selectedNoteIdRef.current = selectedNoteId; }, [selectedNoteId]);
+  useEffect(() => { noteContentsRef.current = noteContents; }, [noteContents]);
+  useEffect(() => { hoveredNodeIdRef.current = hoveredNodeId; }, [hoveredNodeId]);
+  useEffect(() => { activationEnabledRef.current = activationEnabled; }, [activationEnabled]);
+  useEffect(() => { focusNodeIdRef.current = focusNodeId; }, [focusNodeId]);
+  useEffect(() => { showDomainsRef.current = showDomains; }, [showDomains]);
+  useEffect(() => { visibleTagsRef.current = visibleTags; }, [visibleTags]);
+  useEffect(() => { onSelectNoteRef.current = onSelectNote; }, [onSelectNote]);
+
+  // Store adjacency map ref for dynamic activation updates
+  const adjacencyMapRef = useRef<Map<string, Set<string>>>(new Map());
+  // Store D3 node selection ref for dynamic updates
+  const nodeSelectionRef = useRef<d3.Selection<SVGGElement, SimNode, SVGGElement, unknown> | null>(null);
+  const simNodesRef = useRef<SimNode[]>([]);
+
+  // Dynamic activation update (without re-running simulation)
+  const updateActivationGlow = useCallback(() => {
+    const nodeSelection = nodeSelectionRef.current;
+    if (!nodeSelection) return;
+
+    const adjacencyMap = adjacencyMapRef.current;
+    const hovId = hoveredNodeIdRef.current;
+    const actEnabled = activationEnabledRef.current;
+    const focId = focusNodeIdRef.current;
+    const selId = selectedNoteIdRef.current;
+
+    const activationSet = actEnabled && hovId
+      ? getKHopNeighbors(hovId, adjacencyMap, 2)
+      : new Map<string, number>();
+    if (hovId && actEnabled) activationSet.set(hovId, 0);
+
+    const focusSet = focId
+      ? getKHopNeighbors(focId, adjacencyMap, 2)
+      : new Map<string, number>();
+    if (focId) focusSet.set(focId, 0);
+
+    nodeSelection.each(function (d) {
+      const g = d3.select(this);
+      const radius = 8 + Math.min(d.linkCount * 2, 12);
+      const isSelected = d.id === selId;
+      const activationDistance = activationSet.get(d.id) ?? -1;
+      const activationIntensity = calculateActivationIntensity(activationDistance);
+
+      // Remove existing glow
+      g.selectAll('.activation-glow').remove();
+
+      // Add glow effect for activated nodes
+      if (activationIntensity > 0) {
+        const glowColor = activationIntensity === 1 ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))';
+        const glowRadius = radius + (activationIntensity * 8);
+        const glowOpacity = 0.3 * activationIntensity;
+
+        g.insert('circle', ':first-child')
+          .attr('r', glowRadius)
+          .attr('fill', glowColor)
+          .attr('opacity', 0)
+          .attr('class', 'activation-glow')
+          .transition()
+          .duration(200)
+          .attr('opacity', glowOpacity);
+      }
+
+      // Update selected stroke
+      g.selectAll('circle:not(.activation-glow):not(.star-indicator)').each(function () {
+        d3.select(this)
+          .attr('stroke', isSelected ? 'hsl(var(--primary))' : 'hsl(var(--border))')
+          .attr('stroke-width', isSelected ? 3 : 1.5);
+      });
+      g.selectAll('path').each(function () {
+        d3.select(this)
+          .attr('stroke', isSelected ? 'hsl(var(--primary))' : 'hsl(var(--border))')
+          .attr('stroke-width', isSelected ? 3 : 1);
+      });
+    });
+  }, []);
+
+  useEffect(() => { updateActivationGlow(); }, [hoveredNodeId, focusNodeId, selectedNoteId, activationEnabled, updateActivationGlow]);
+
   const runSimulation = useCallback(() => {
     if (!svgRef.current || !containerRef.current || !graphData) return;
 
@@ -102,23 +198,12 @@ export default function KnowledgeGraph({
 
     // Build adjacency map for activation spreading
     const adjacencyMap = buildAdjacencyMap(graphData.links);
-
-    // Calculate activation set when a node is hovered
-    const activationSet = activationEnabled && hoveredNodeId
-      ? getKHopNeighbors(hoveredNodeId, adjacencyMap, 2)
-      : new Map<string, number>();
-
-    // Calculate focus set when a node is focused
-    const focusSet = focusNodeId
-      ? getKHopNeighbors(focusNodeId, adjacencyMap, 2)
-      : new Map<string, number>();
-    if (focusNodeId) {
-      focusSet.set(focusNodeId, 0);
-    }
+    adjacencyMapRef.current = adjacencyMap;
 
     // Create copies of data for D3 (use filtered data)
     const simNodes: SimNode[] = graphData.nodes.map(d => ({ ...d }));
     const simLinks: SimLink[] = graphData.links.map(d => ({ ...d }));
+    simNodesRef.current = simNodes;
 
     // Calculate tag cluster centers
     const tagCenters = calculateTagCenters(width, height, graphData.allTags, graphData.nodes.length);
@@ -143,8 +228,9 @@ export default function KnowledgeGraph({
     // Custom cluster force
     const clusterForce = (alpha: number) => {
       const strength = 0.15 * alpha;
+      const vt = visibleTagsRef.current;
       for (const node of simNodes) {
-        if (node.primaryTag && visibleTags.has(node.primaryTag.id)) {
+        if (node.primaryTag && vt.has(node.primaryTag.id)) {
           const center = tagCenters.get(node.primaryTag.id);
           if (center) {
             node.vx = (node.vx || 0) + (center.x - (node.x || 0)) * strength;
@@ -156,13 +242,9 @@ export default function KnowledgeGraph({
 
     // Adaptive spacing based on node count
     const nodeCount = simNodes.length;
-    // Smaller repulsion for fewer nodes, stronger for more nodes
     const chargeStrength = nodeCount <= 10 ? -100 : nodeCount <= 30 ? -150 : -200;
-    // Closer links for fewer nodes
     const linkDistance = nodeCount <= 10 ? 50 : nodeCount <= 30 ? 65 : 80;
-    // Tighter collision for fewer nodes
     const collisionRadius = nodeCount <= 10 ? 15 : nodeCount <= 30 ? 20 : 25;
-    // Stronger center force for fewer nodes
     const centerStrength = nodeCount <= 10 ? 0.15 : nodeCount <= 30 ? 0.1 : 0.05;
 
     // Create simulation with adaptive forces
@@ -175,7 +257,6 @@ export default function KnowledgeGraph({
       .force('center', d3.forceCenter(width / 2, height / 2).strength(centerStrength))
       .force('collision', d3.forceCollide().radius(collisionRadius))
       .force('cluster', clusterForce)
-      // Add radial force to keep nodes more compact
       .force('radial', d3.forceRadial(
         Math.min(width, height) / 4 * (nodeCount <= 10 ? 0.5 : 1),
         width / 2,
@@ -184,7 +265,7 @@ export default function KnowledgeGraph({
 
     simulationRef.current = simulation;
 
-    // Draw links with activation glow
+    // Draw links
     const link = g.append('g')
       .attr('class', 'links')
       .selectAll('line')
@@ -193,17 +274,17 @@ export default function KnowledgeGraph({
       .attr('stroke', 'hsl(var(--muted-foreground))')
       .attr('stroke-opacity', d => {
         const strength = (d as SimLink & { strength?: number }).strength ?? 1.0;
-        return 0.2 + (strength * 0.4); // Scale opacity between 0.2 and 0.6
+        return 0.2 + (strength * 0.4);
       })
       .attr('stroke-width', d => {
         const strength = (d as SimLink & { strength?: number }).strength ?? 1.0;
-        return 1.0 + (strength * 2.0); // Scale width between 1.0 and 3.0
+        return 1.0 + (strength * 2.0);
       });
 
     // Draw nodes
     const node = g.append('g')
       .attr('class', 'nodes')
-      .selectAll('g')
+      .selectAll<SVGGElement, SimNode>('g')
       .data(simNodes)
       .join('g')
       .attr('cursor', 'pointer')
@@ -223,31 +304,16 @@ export default function KnowledgeGraph({
           d.fy = null;
         }));
 
-    // Render node circles with activation glow
+    // Store node selection ref for dynamic updates
+    nodeSelectionRef.current = node as any;
+
+    // Render node circles (static — activation glow is handled separately)
     node.each(function (d) {
       const g = d3.select(this);
       const radius = 8 + Math.min(d.linkCount * 2, 12);
-      const isSelected = d.id === selectedNoteId;
-      const activationDistance = activationSet.get(d.id) ?? -1;
-      const activationIntensity = calculateActivationIntensity(activationDistance);
-      const focusDistance = focusSet.get(d.id) ?? -1;
-      const isInFocus = focusDistance >= 0;
-
-      // Add glow effect for activated nodes
-      if (activationIntensity > 0) {
-        const glowColor = activationIntensity === 1 ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))';
-        const glowRadius = radius + (activationIntensity * 8);
-        const glowOpacity = 0.3 * activationIntensity;
-
-        g.append('circle')
-          .attr('r', glowRadius)
-          .attr('fill', glowColor)
-          .attr('opacity', glowOpacity)
-          .attr('class', 'activation-glow');
-      }
+      const isSelected = d.id === selectedNoteIdRef.current;
 
       if (d.tags.length > 1) {
-        // Multi-tag node: render as pie segments
         const arcs = createPieArcs(d.tags, radius);
         arcs.forEach(arc => {
           g.append('path')
@@ -257,7 +323,6 @@ export default function KnowledgeGraph({
             .attr('stroke-width', isSelected ? 3 : 1);
         });
       } else {
-        // Single or no tag: render as circle
         const color = d.tags.length === 1 ? d.tags[0].color : 'hsl(var(--muted))';
         g.append('circle')
           .attr('r', radius)
@@ -266,12 +331,12 @@ export default function KnowledgeGraph({
           .attr('stroke-width', isSelected ? 3 : 1.5);
       }
 
-      // Starred indicator
       if (d.isStarred) {
         g.append('circle')
           .attr('r', 3)
           .attr('cy', -radius - 4)
-          .attr('fill', 'hsl(45, 93%, 47%)');
+          .attr('fill', 'hsl(45, 93%, 47%)')
+          .attr('class', 'star-indicator');
       }
     });
 
@@ -280,24 +345,23 @@ export default function KnowledgeGraph({
       .on('click', (event, d) => {
         event.stopPropagation();
         handleNodeClick(d.id);
-        onSelectNote(d.id);
+        onSelectNoteRef.current(d.id);
       })
       .on('mouseenter', function (event, d) {
         handleNodeHover(d.id);
-        d3.select(this).select('circle, path')
+        d3.select(this).select('circle:not(.activation-glow):not(.star-indicator), path')
           .transition()
           .duration(150)
           .attr('transform', 'scale(1.15)');
 
-        // Show tooltip with preview
-        showNodeTooltip(event, d, noteContents);
+        showNodeTooltip(event, d, noteContentsRef.current);
       })
       .on('mousemove', function (event) {
         moveNodeTooltip(event);
       })
       .on('mouseleave', function (event, d) {
         handleNodeHover(null);
-        d3.select(this).select('circle, path')
+        d3.select(this).select('circle:not(.activation-glow):not(.star-indicator), path')
           .transition()
           .duration(150)
           .attr('transform', 'scale(1)');
@@ -318,7 +382,7 @@ export default function KnowledgeGraph({
     const renderHulls = (animate = false) => {
       const duration = animate ? 300 : 0;
 
-      if (!showDomains) {
+      if (!showDomainsRef.current) {
         // Fade out existing hulls
         hullsGroup.selectAll('*')
           .transition()
@@ -329,7 +393,7 @@ export default function KnowledgeGraph({
       }
 
       graphData.allTags.forEach(tag => {
-        if (!visibleTags.has(tag.id)) return;
+        if (!visibleTagsRef.current.has(tag.id)) return;
 
         const tagNodes = simNodes.filter(n =>
           n.tags.some(t => t.id === tag.id) &&
@@ -450,9 +514,9 @@ export default function KnowledgeGraph({
       node.attr('transform', d => `translate(${d.x || 0},${d.y || 0})`);
 
       // Only animate on first render or when toggling
-      const shouldAnimate = prevShowDomainsRef.current !== showDomains;
+      const shouldAnimate = prevShowDomainsRef.current !== showDomainsRef.current;
       renderHulls(shouldAnimate);
-      prevShowDomainsRef.current = showDomains;
+      prevShowDomainsRef.current = showDomainsRef.current;
     });
 
     // Initial zoom to fit
@@ -484,7 +548,7 @@ export default function KnowledgeGraph({
       simulation.stop();
       hideNodeTooltip();
     };
-  }, [graphData, selectedNoteId, onSelectNote, showDomains, visibleTags, noteContents]);
+  }, [graphData]);
 
   // Tooltip helper functions
   const showNodeTooltip = useCallback((event: { clientX: number; clientY: number }, d: SimNode, contents: Map<string, string | null>) => {
@@ -543,8 +607,23 @@ export default function KnowledgeGraph({
   }, []);
 
   useEffect(() => {
-    runSimulation();
-  }, [runSimulation]);
+    if (viewMode === '2d') {
+      runSimulation();
+    }
+    return () => {
+      // Stop simulation when leaving 2D view
+      if (viewMode !== '2d' && simulationRef.current) {
+        simulationRef.current.stop();
+      }
+    };
+  }, [runSimulation, viewMode]);
+
+  // Gently reheat simulation when domain visibility changes (no full restart)
+  useEffect(() => {
+    if (viewMode === '2d' && simulationRef.current) {
+      simulationRef.current.alpha(0.3).restart();
+    }
+  }, [showDomains, visibleTags, viewMode]);
 
   // Handle resize
   useEffect(() => {
@@ -631,6 +710,9 @@ export default function KnowledgeGraph({
             width={containerRef.current?.clientWidth || 800}
             height={containerRef.current?.clientHeight || 600}
             noteContents={noteContents}
+            allTags={graphData.allTags}
+            showDomains={showDomains}
+            visibleTags={visibleTags}
           />
         </Suspense>
       )}
@@ -658,6 +740,17 @@ export default function KnowledgeGraph({
           nodeCount={graphData.nodes.length}
           linkCount={graphData.links.length}
           zoomPercent={zoomPercent}
+        />
+      )}
+
+      {viewMode === '3d' && (
+        <GraphLegend
+          tags={graphData.allTags}
+          visibleTags={visibleTags}
+          onToggleTag={toggleTag}
+          nodeCount={graphData.nodes.length}
+          linkCount={graphData.links.length}
+          zoomPercent={100}
         />
       )}
 

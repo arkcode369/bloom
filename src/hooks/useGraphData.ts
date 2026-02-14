@@ -35,6 +35,7 @@ export function useGraphData() {
 
   return useQuery({
     queryKey: ['graph-data'],
+    staleTime: 30_000, // 30s — prevent excessive refetches that restart the D3 simulation
     queryFn: async (): Promise<GraphData> => {
       // Fetch notes and tags first
       const [notes, tags, edgeStrengths] = await Promise.all([

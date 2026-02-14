@@ -10,6 +10,7 @@ export function useNotes() {
 
   return useQuery({
     queryKey: ['notes'],
+    staleTime: 30_000, // 30s — prevent excessive refetches
     queryFn: async () => {
       return adapter.notes.getAll();
     },

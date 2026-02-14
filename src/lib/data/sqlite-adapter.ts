@@ -1009,24 +1009,41 @@ export function createSQLiteAdapter(): DataAdapter {
             FROM edge_interactions
             WHERE user_id = ?
             GROUP BY source_note_id, target_note_id
+          ),
+          -- Hebbian co-access: notes accessed within 5 minutes of each other
+          -- "Fire together, wire together" — frequent co-access strengthens edges
+          co_access AS (
+            SELECT 
+              CASE WHEN a.note_id < b.note_id THEN a.note_id ELSE b.note_id END as source_note_id,
+              CASE WHEN a.note_id < b.note_id THEN b.note_id ELSE a.note_id END as target_note_id,
+              COUNT(*) * 0.05 as strength
+            FROM note_access_log a
+            INNER JOIN note_access_log b
+              ON a.user_id = b.user_id
+              AND a.note_id < b.note_id
+              AND ABS(
+                CAST((julianday(a.created_at) - julianday(b.created_at)) * 86400 AS INTEGER)
+              ) <= 300  -- within 5 minutes (300 seconds)
+            WHERE a.user_id = ?
+            GROUP BY 
+              CASE WHEN a.note_id < b.note_id THEN a.note_id ELSE b.note_id END,
+              CASE WHEN a.note_id < b.note_id THEN b.note_id ELSE a.note_id END
+          ),
+          -- Merge all strength sources
+          combined AS (
+            SELECT source_note_id, target_note_id, strength FROM link_strength
+            UNION ALL
+            SELECT source_note_id, target_note_id, strength FROM interaction_strength
+            UNION ALL
+            SELECT source_note_id, target_note_id, strength FROM co_access
           )
           SELECT 
-            l.source_note_id,
-            l.target_note_id,
-            MIN(2.0, COALESCE(l.strength, 0) + COALESCE(i.strength, 0)) as strength
-          FROM link_strength l
-          LEFT JOIN interaction_strength i 
-            ON l.source_note_id = i.source_note_id AND l.target_note_id = i.target_note_id
-          UNION
-          SELECT 
-            i.source_note_id,
-            i.target_note_id,
-            MIN(2.0, COALESCE(l.strength, 0) + COALESCE(i.strength, 0)) as strength
-          FROM interaction_strength i
-          LEFT JOIN link_strength l 
-            ON l.source_note_id = i.source_note_id AND l.target_note_id = i.target_note_id
-          WHERE l.source_note_id IS NULL`,
-          [userId, userId]
+            source_note_id,
+            target_note_id,
+            MIN(2.0, SUM(strength)) as strength
+          FROM combined
+          GROUP BY source_note_id, target_note_id`,
+          [userId, userId, userId]
         );
 
         return result.map(row => ({
