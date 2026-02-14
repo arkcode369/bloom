@@ -27,11 +27,21 @@ export interface UpdateStatus {
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
+/** Build auth headers for private repo access (token injected at build time) */
+function getUpdaterHeaders(): Record<string, string> | undefined {
+  const token = import.meta.env.VITE_UPDATER_TOKEN;
+  if (token) {
+    return { Authorization: `token ${token}` };
+  }
+  return undefined;
+}
+
 /**
  * Silent auto-update hook.
  * - Checks for updates on mount and every 4 hours
  * - Downloads updates silently in the background
  * - Shows a toast when update is ready, user can restart when convenient
+ * - Supports private GitHub repos via VITE_UPDATER_TOKEN env var
  */
 export function useAutoUpdate(): UpdateStatus {
   const [currentVersion, setCurrentVersion] = useState('');
@@ -56,7 +66,7 @@ export function useAutoUpdate(): UpdateStatus {
       setChecking(true);
       setError(null);
 
-      const update = await check();
+      const update = await check({ headers: getUpdaterHeaders() });
 
       if (update) {
         setAvailableVersion(update.version);
@@ -86,7 +96,7 @@ export function useAutoUpdate(): UpdateStatus {
               console.log('[AutoUpdate] Download finished');
               break;
           }
-        });
+        }, { headers: getUpdaterHeaders() });
 
         setDownloading(false);
         setReadyToInstall(true);
