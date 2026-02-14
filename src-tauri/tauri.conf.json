@@ -33,7 +33,7 @@
       "endpoints": [
         "https://github.com/srikresna/bloom-brain/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlBODkzMzUwQzFFNzhDMDAKUldRQWpPZkJVRE9KbWpTN0ZEMUw3dXpMbTg0WEdjeEZ1bVBCOG1GblVvZFRZRmtUdGlBUVdvcUwK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFCOTdFRDA0Mzk4NThGNDQKUldSRWo0VTVCTzJYcTFoRnFWUjI3Uzh0aENvOUN2dTJzTDV2SVBOeHM2RHNjdVlWUFREM21XQUcK"
     }
   },
   "bundle": {
