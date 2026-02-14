@@ -44,6 +44,22 @@ export type {
   AuthResult,
   Session,
 
+  // Planning
+  DailyPlan,
+  DailyPlanWithDetails,
+  Target,
+  TimeBlock,
+  TargetStatus,
+  TargetPriority,
+  TargetType,
+  TimeBlockType,
+  CreateDailyPlanInput,
+  UpdateDailyPlanInput,
+  CreateTargetInput,
+  UpdateTargetInput,
+  CreateTimeBlockInput,
+  UpdateTimeBlockInput,
+
   // Adapter
   DataAdapter,
   DataAdapterType,

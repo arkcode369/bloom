@@ -11,9 +11,15 @@ export interface StoragePreferences {
   mediaPath: string | null;
 }
 
+export interface WidgetPreferences {
+  showWidgetOnStartup: boolean;
+  quickCaptureAsWidget: boolean;
+}
+
 export interface AppPreferences {
   editor: EditorPreferences;
   storage: StoragePreferences;
+  widget: WidgetPreferences;
 }
 
 const defaultPreferences: AppPreferences = {
@@ -26,6 +32,10 @@ const defaultPreferences: AppPreferences = {
     exportPath: null,
     mediaPath: null,
   },
+  widget: {
+    showWidgetOnStartup: false,
+    quickCaptureAsWidget: false,
+  },
 };
 
 interface PreferencesContextType {
@@ -37,6 +47,10 @@ interface PreferencesContextType {
   updateStoragePreference: <K extends keyof StoragePreferences>(
     key: K,
     value: StoragePreferences[K]
+  ) => void;
+  updateWidgetPreference: <K extends keyof WidgetPreferences>(
+    key: K,
+    value: WidgetPreferences[K]
   ) => void;
   resetPreferences: () => void;
 }
@@ -99,12 +113,25 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
     }));
   };
 
+  const updateWidgetPreference = <K extends keyof WidgetPreferences>(
+    key: K,
+    value: WidgetPreferences[K]
+  ) => {
+    setPreferences(prev => ({
+      ...prev,
+      widget: {
+        ...prev.widget,
+        [key]: value,
+      },
+    }));
+  };
+
   const resetPreferences = () => {
     setPreferences(defaultPreferences);
   };
 
   return (
-    <PreferencesContext.Provider value={{ preferences, updateEditorPreference, updateStoragePreference, resetPreferences }}>
+    <PreferencesContext.Provider value={{ preferences, updateEditorPreference, updateStoragePreference, updateWidgetPreference, resetPreferences }}>
       {children}
     </PreferencesContext.Provider>
   );

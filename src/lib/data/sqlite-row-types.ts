@@ -111,3 +111,45 @@ export interface VersionRestoreRow {
     title: string;
     content: string;
 }
+
+// ============= Daily Planning Row Types =============
+
+export interface DailyPlanRow {
+    id: string;
+    user_id: string;
+    plan_date: string;
+    review_notes: string | null;
+    review_completed: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface TargetRow {
+    id: string;
+    user_id: string;
+    daily_plan_id: string;
+    title: string;
+    description: string | null;
+    target_type: string;
+    estimated_minutes: number | null;
+    actual_minutes: number | null;
+    status: string;
+    priority: string;
+    note_ids: string;
+    sort_order: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface TimeBlockRow {
+    id: string;
+    user_id: string;
+    daily_plan_id: string;
+    target_id: string | null;
+    start_time: string;
+    end_time: string;
+    block_type: string;
+    title: string;
+    color: string;
+    created_at: string;
+}

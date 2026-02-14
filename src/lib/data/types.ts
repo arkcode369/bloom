@@ -68,6 +68,109 @@ export interface User {
   email: string;
 }
 
+// ============= Daily Planning Types =============
+
+export type TargetStatus = 'pending' | 'in_progress' | 'completed' | 'skipped';
+export type TargetPriority = 'low' | 'medium' | 'high';
+export type TargetType = 'note_creation' | 'research' | 'review' | 'writing' | 'reading' | 'custom';
+export type TimeBlockType = 'focus_work' | 'break' | 'review' | 'planning' | 'research' | 'writing' | 'custom';
+
+export interface DailyPlan {
+  id: string;
+  user_id: string;
+  plan_date: string;
+  review_notes: string | null;
+  review_completed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Target {
+  id: string;
+  user_id: string;
+  daily_plan_id: string;
+  title: string;
+  description: string | null;
+  target_type: TargetType;
+  estimated_minutes: number | null;
+  actual_minutes: number | null;
+  status: TargetStatus;
+  priority: TargetPriority;
+  note_ids: string[];
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TimeBlock {
+  id: string;
+  user_id: string;
+  daily_plan_id: string;
+  target_id: string | null;
+  start_time: string;
+  end_time: string;
+  block_type: TimeBlockType;
+  title: string;
+  color: string;
+  created_at: string;
+}
+
+export interface CreateDailyPlanInput {
+  plan_date: string;
+}
+
+export interface UpdateDailyPlanInput {
+  review_notes?: string | null;
+  review_completed?: boolean;
+}
+
+export interface CreateTargetInput {
+  daily_plan_id: string;
+  title: string;
+  description?: string;
+  target_type?: TargetType;
+  estimated_minutes?: number;
+  priority?: TargetPriority;
+  sort_order?: number;
+}
+
+export interface UpdateTargetInput {
+  title?: string;
+  description?: string | null;
+  target_type?: TargetType;
+  estimated_minutes?: number | null;
+  actual_minutes?: number | null;
+  status?: TargetStatus;
+  priority?: TargetPriority;
+  note_ids?: string[];
+  sort_order?: number;
+}
+
+export interface CreateTimeBlockInput {
+  daily_plan_id: string;
+  target_id?: string;
+  start_time: string;
+  end_time: string;
+  block_type?: TimeBlockType;
+  title?: string;
+  color?: string;
+}
+
+export interface UpdateTimeBlockInput {
+  target_id?: string | null;
+  start_time?: string;
+  end_time?: string;
+  block_type?: TimeBlockType;
+  title?: string;
+  color?: string;
+}
+
+export interface DailyPlanWithDetails extends DailyPlan {
+  targets: Target[];
+  timeBlocks: TimeBlock[];
+  completionRate: number;
+}
+
 export type AvatarStyle = 'beam' | 'marble' | 'pixel' | 'sunset' | 'ring' | 'bauhaus';
 
 // ============= Input Types =============
@@ -208,6 +311,27 @@ export interface DataAdapter {
     logEdgeInteraction(sourceNoteId: string, targetNoteId: string, interactionType: string): Promise<void>;
     logNoteAccess(noteId: string): Promise<void>;
     getEdgeStrength(): Promise<Array<{ source_note_id: string; target_note_id: string; strength: number }>>;
+  };
+
+  // ============= Daily Planning =============
+  planning: {
+    getDailyPlan(date: string): Promise<DailyPlan | null>;
+    getOrCreateDailyPlan(date: string): Promise<DailyPlan>;
+    updateDailyPlan(id: string, input: UpdateDailyPlanInput): Promise<DailyPlan>;
+    getDailyPlanWithDetails(date: string): Promise<DailyPlanWithDetails>;
+    getPlansInRange(startDate: string, endDate: string): Promise<DailyPlan[]>;
+    getPlansInRangeWithDetails(startDate: string, endDate: string): Promise<DailyPlanWithDetails[]>;
+
+    getTargets(dailyPlanId: string): Promise<Target[]>;
+    createTarget(input: CreateTargetInput): Promise<Target>;
+    updateTarget(id: string, input: UpdateTargetInput): Promise<Target>;
+    deleteTarget(id: string): Promise<void>;
+    reorderTargets(dailyPlanId: string, orderedIds: string[]): Promise<void>;
+
+    getTimeBlocks(dailyPlanId: string): Promise<TimeBlock[]>;
+    createTimeBlock(input: CreateTimeBlockInput): Promise<TimeBlock>;
+    updateTimeBlock(id: string, input: UpdateTimeBlockInput): Promise<TimeBlock>;
+    deleteTimeBlock(id: string): Promise<void>;
   };
 }
 

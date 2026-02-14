@@ -37,6 +37,16 @@
     "dialog:allow-confirm",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
-    "global-shortcut:allow-unregister-all"
+    "global-shortcut:allow-unregister-all",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-set-decorations",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-skip-taskbar",
+    "core:window:allow-destroy",
+    "core:webview:allow-get-all-webviews",
+    "core:webview:allow-webview-close",
+    "core:event:default"
   ]
 }

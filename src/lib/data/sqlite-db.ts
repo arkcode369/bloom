@@ -116,7 +116,55 @@ const SCHEMA_SQL = [
   `CREATE INDEX IF NOT EXISTS idx_note_tags_tag ON note_tags(tag_id)`,
   `CREATE INDEX IF NOT EXISTS idx_links_source ON links(source_note_id)`,
   `CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_note_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_note_versions_note ON note_versions(note_id)`
+  `CREATE INDEX IF NOT EXISTS idx_note_versions_note ON note_versions(note_id)`,
+  // Daily Planning tables
+  `CREATE TABLE IF NOT EXISTS daily_plans (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'local-user',
+    plan_date TEXT NOT NULL,
+    review_notes TEXT,
+    review_completed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(user_id, plan_date)
+  )`,
+  `CREATE TABLE IF NOT EXISTS targets (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'local-user',
+    daily_plan_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    target_type TEXT NOT NULL DEFAULT 'custom',
+    estimated_minutes INTEGER,
+    actual_minutes INTEGER,
+    status TEXT NOT NULL DEFAULT 'pending',
+    priority TEXT NOT NULL DEFAULT 'medium',
+    note_ids TEXT DEFAULT '[]',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (daily_plan_id) REFERENCES daily_plans(id) ON DELETE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS time_blocks (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'local-user',
+    daily_plan_id TEXT NOT NULL,
+    target_id TEXT,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    block_type TEXT NOT NULL DEFAULT 'focus_work',
+    title TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '#6366f1',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (daily_plan_id) REFERENCES daily_plans(id) ON DELETE CASCADE,
+    FOREIGN KEY (target_id) REFERENCES targets(id) ON DELETE SET NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_daily_plans_date ON daily_plans(plan_date)`,
+  `CREATE INDEX IF NOT EXISTS idx_daily_plans_user ON daily_plans(user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_targets_plan ON targets(daily_plan_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_targets_status ON targets(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_time_blocks_plan ON time_blocks(daily_plan_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_time_blocks_target ON time_blocks(target_id)`
 ];
 
 // ============= Database Manager =============
@@ -211,6 +259,86 @@ export async function initDatabase(): Promise<Database> {
     await db.execute('UPDATE schema_version SET version = 5');
     console.log('✅ Migration to version 5 complete');
     currentVersion = 5;
+  }
+
+  if (currentVersion < 6) {
+    console.log('🔄 Migrating database to version 6 (Daily Planning)...');
+
+    // Check if planning tables already exist
+    const tables = await db.select<Array<{ name: string }>>("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('daily_plans', 'targets', 'time_blocks')");
+    const existingTables = tables.map(t => t.name);
+    
+    if (existingTables.length > 0) {
+      console.log('📋 Found existing planning tables:', existingTables);
+      
+      // Check and add missing columns instead of dropping
+      try {
+        // Check daily_plans columns
+        const dailyPlansColumns = await db.select<Array<{ name: string }>>(`PRAGMA table_info(daily_plans)`);
+        const dailyPlansColumnNames = dailyPlansColumns.map(c => c.name);
+        
+        if (!dailyPlansColumnNames.includes('review_notes')) {
+          await db.execute('ALTER TABLE daily_plans ADD COLUMN review_notes TEXT');
+          console.log('✅ Added review_notes to daily_plans');
+        }
+        if (!dailyPlansColumnNames.includes('review_completed')) {
+          await db.execute('ALTER TABLE daily_plans ADD COLUMN review_completed INTEGER NOT NULL DEFAULT 0');
+          console.log('✅ Added review_completed to daily_plans');
+        }
+        
+        // Check targets columns
+        const targetsColumns = await db.select<Array<{ name: string }>>(`PRAGMA table_info(targets)`);
+        const targetsColumnNames = targetsColumns.map(c => c.name);
+        
+        if (!targetsColumnNames.includes('estimated_minutes')) {
+          await db.execute('ALTER TABLE targets ADD COLUMN estimated_minutes INTEGER');
+          console.log('✅ Added estimated_minutes to targets');
+        }
+        if (!targetsColumnNames.includes('actual_minutes')) {
+          await db.execute('ALTER TABLE targets ADD COLUMN actual_minutes INTEGER');
+          console.log('✅ Added actual_minutes to targets');
+        }
+        if (!targetsColumnNames.includes('sort_order')) {
+          await db.execute('ALTER TABLE targets ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0');
+          console.log('✅ Added sort_order to targets');
+        }
+        
+        // Check time_blocks columns
+        const timeBlocksColumns = await db.select<Array<{ name: string }>>(`PRAGMA table_info(time_blocks)`);
+        const timeBlocksColumnNames = timeBlocksColumns.map(c => c.name);
+        
+        if (!timeBlocksColumnNames.includes('color')) {
+          await db.execute('ALTER TABLE time_blocks ADD COLUMN color TEXT NOT NULL DEFAULT "#3b82f6"');
+          console.log('✅ Added color to time_blocks');
+        }
+        
+      } catch (e) {
+        console.log('⚠️ Could not alter tables, will recreate:', e);
+        // Fallback: drop and recreate only if alter fails
+        await db.execute('DROP TABLE IF EXISTS time_blocks');
+        await db.execute('DROP TABLE IF EXISTS targets');
+        await db.execute('DROP TABLE IF EXISTS daily_plans');
+        console.log('✅ Dropped planning tables (fallback)');
+      }
+    }
+
+    // Create tables only if they don't exist
+    if (existingTables.length === 0) {
+      console.log('🔧 Creating new planning tables...');
+      const planningStatements = SCHEMA_SQL.filter(sql =>
+        sql.includes('daily_plans') || sql.includes('targets') || sql.includes('time_blocks')
+      );
+      for (const sql of planningStatements) {
+        await db.execute(sql);
+        console.log('✅ Executed:', sql.split('CREATE TABLE')[1]?.split('(')[0]?.trim());
+      }
+    } else {
+      console.log('✅ Planning tables already exist, only added missing columns');
+    }
+
+    await db.execute('UPDATE schema_version SET version = 6');
+    console.log('✅ Migration to version 6 complete');
+    currentVersion = 6;
   }
 
   isInitialized = true;

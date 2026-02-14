@@ -12,6 +12,8 @@ import Index from "./pages/Index";
 import Welcome from "./pages/Welcome";
 import NoteWindow from "./pages/NoteWindow";
 import NotFound from "./pages/NotFound";
+import { WidgetPage } from "./pages/WidgetPage";
+import { QuickCapturePage } from "./pages/QuickCapturePage";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { Loader2 } from "lucide-react";
 
@@ -53,6 +55,12 @@ const AppContent = () => {
         path="/note/:id"
         element={isOnboarded ? <NoteWindow /> : <Navigate to="/welcome" replace />}
       />
+
+      {/* Planner Widget Window */}
+      <Route path="/widget" element={<WidgetPage />} />
+
+      {/* Quick Capture Widget Window */}
+      <Route path="/quick-capture" element={<QuickCapturePage />} />
 
       {/* Catch-all */}
       <Route path="*" element={<NotFound />} />

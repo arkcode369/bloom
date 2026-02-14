@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import HelpPanel from '@/components/help/HelpPanel';
 import { useAuth } from '@/hooks/useAuth';
@@ -36,8 +37,10 @@ import {
   Network,
   Home,
   HelpCircle,
+  CalendarDays,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useActiveTimeBlock } from '@/hooks/useActiveTimeBlock';
 import {
   Collapsible,
   CollapsibleContent,
@@ -45,7 +48,7 @@ import {
 } from '@/components/ui/collapsible';
 import TagManager from '@/components/tags/TagManager';
 
-type ActiveView = 'home' | 'all' | 'starred' | 'tag' | 'note';
+type ActiveView = 'home' | 'all' | 'starred' | 'tag' | 'note' | 'planner';
 
 interface AppSidebarProps {
   selectedNoteId: string | null;
@@ -60,6 +63,7 @@ interface AppSidebarProps {
   onGoHome: () => void;
   onViewAllNotes: () => void;
   onViewStarred: () => void;
+  onViewPlanner: () => void;
   activeView: ActiveView;
   isCreating?: boolean;
 }
@@ -77,6 +81,7 @@ export default function AppSidebar({
   onGoHome,
   onViewAllNotes,
   onViewStarred,
+  onViewPlanner,
   activeView,
   isCreating,
 }: AppSidebarProps) {
@@ -92,8 +97,17 @@ export default function AppSidebar({
   const [notesExpanded, setNotesExpanded] = useState(true);
   const [tagsExpanded, setTagsExpanded] = useState(true);
   const [helpOpen, setHelpOpen] = useState(false);
+  const activeTimeBlock = useActiveTimeBlock();
 
-
+  const formatRemaining = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    if (m >= 60) {
+      const h = Math.floor(m / 60);
+      const rm = m % 60;
+      return `${h}h ${rm}m`;
+    }
+    return `${m}m`;
+  };
 
   const recentNotes = notes?.slice(0, 10) || [];
 
@@ -206,6 +220,17 @@ export default function AppSidebar({
                 >
                   <Archive className="h-4 w-4" />
                   {!collapsed && <span className="font-body text-sm">{t('sidebar.archive')}</span>}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={onViewPlanner}
+                  tooltip={t('sidebar.daily_planner')}
+                  className={cn('gap-2', activeView === 'planner' && 'bg-accent')}
+                >
+                  <CalendarDays className="h-4 w-4" />
+                  {!collapsed && <span className="font-body text-sm font-medium">{t('sidebar.daily_planner')}</span>}
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
@@ -342,30 +367,50 @@ export default function AppSidebar({
 
         {!collapsed && user && (
           <div className="px-3 py-2 flex items-center gap-2">
-            <ProfileAvatar
-              name={profile?.display_name || 'Workspace'}
-              size={28}
-              style={profile?.avatar_style || 'beam'}
-              colors={profile?.avatar_colors}
-            />
+            <div className="relative shrink-0">
+              <ProfileAvatar
+                name={profile?.display_name || 'Workspace'}
+                size={28}
+                style={profile?.avatar_style || 'beam'}
+                colors={profile?.avatar_colors}
+              />
+              {activeTimeBlock.isActive && (
+                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background bg-emerald-500 animate-pulse" />
+              )}
+            </div>
             <div className="flex-1 min-w-0">
               <p className="font-body text-xs font-medium truncate">
                 {profile?.display_name || 'My Workspace'}
               </p>
-              <p className="font-body text-xs text-muted-foreground truncate">
-                Local Database
-              </p>
+              <AnimatePresence mode="wait">
+                {activeTimeBlock.isActive && activeTimeBlock.block && (
+                  <motion.p
+                    key="active-block"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    className="font-body text-[11px] text-emerald-600 dark:text-emerald-400 truncate font-medium"
+                  >
+                    {activeTimeBlock.block.title || activeTimeBlock.block.block_type} · {formatRemaining(activeTimeBlock.remainingSeconds)} left
+                  </motion.p>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         )}
         {collapsed && user && (
           <div className="flex justify-center py-2">
-            <ProfileAvatar
-              name={profile?.display_name || 'Workspace'}
-              size={28}
-              style={profile?.avatar_style || 'beam'}
-              colors={profile?.avatar_colors}
-            />
+            <div className="relative">
+              <ProfileAvatar
+                name={profile?.display_name || 'Workspace'}
+                size={28}
+                style={profile?.avatar_style || 'beam'}
+                colors={profile?.avatar_colors}
+              />
+              {activeTimeBlock.isActive && (
+                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background bg-emerald-500 animate-pulse" />
+              )}
+            </div>
           </div>
         )}
       </SidebarFooter>

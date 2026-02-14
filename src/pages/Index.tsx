@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { useProfile } from '@/hooks/useProfile';
 import {
   useNotes,
@@ -23,7 +24,12 @@ import ArchivedNotesDialog from '@/components/notes/ArchivedNotesDialog';
 import FloatingQuickCapture from '@/components/FloatingQuickCapture';
 import QuickCaptureModal from '@/components/command/QuickCaptureModal';
 import HomePage from '@/components/home/HomePage';
+import { DailyPlanner } from '@/components/calendar/DailyPlanner';
+import { ErrorBoundary } from '@/components/calendar/ErrorBoundary';
+import { DebugWrapper } from '@/components/calendar/DebugWrapper';
 import { useGlobalShortcuts } from '@/hooks/useGlobalShortcuts';
+import { usePreferences } from '@/hooks/usePreferences';
+import { useWidgetWindow } from '@/hooks/useWidgetWindow';
 import {
   FileText,
   Star,
@@ -54,6 +60,9 @@ export default function Index() {
   const archiveNote = useArchiveNote();
   const deleteNote = useDeleteNote();
 
+  // Initialize widget window (auto show/hide based on active timeblock)
+  useWidgetWindow();
+
   const selectedNote = notes?.find(n => n.id === nav.selectedNoteId);
   const selectedTag = allTags?.find(t => t.id === nav.selectedTagId);
 
@@ -73,9 +82,25 @@ export default function Index() {
     }
   }, [createNote, nav]);
 
+  const { preferences } = usePreferences();
+
   useGlobalShortcuts(() => {
     dialogs.openQuickCapture();
-  });
+  }, preferences.widget.quickCaptureAsWidget);
+
+  // Listen for navigate-to-note events from widget windows
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<{ noteId: string }>('navigate-to-note', (event) => {
+      const { noteId } = event.payload;
+      if (noteId) {
+        nav.setSelectedTagId(null);
+        nav.setSelectedNoteId(noteId);
+        nav.setViewMode('note');
+      }
+    }).then(fn => { unlisten = fn; });
+    return () => { unlisten?.(); };
+  }, [nav]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -128,6 +153,11 @@ export default function Index() {
           onGoHome={nav.handleGoHome}
           onViewAllNotes={nav.handleViewAllNotes}
           onViewStarred={nav.handleViewStarred}
+          onViewPlanner={() => {
+            nav.setSelectedNoteId(null);
+            nav.setSelectedTagId(null);
+            nav.setViewMode('planner');
+          }}
           activeView={nav.viewMode}
           isCreating={createNote.isPending}
         />
@@ -192,6 +222,12 @@ export default function Index() {
                 onCreateNote={() => handleCreateNote()}
                 isLoading={false}
               />
+            ) : nav.viewMode === 'planner' ? (
+              <ErrorBoundary>
+                <DebugWrapper>
+                  <DailyPlanner />
+                </DebugWrapper>
+              </ErrorBoundary>
             ) : (
               <HomePage
                 onCreateNote={() => handleCreateNote()}

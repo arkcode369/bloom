@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 
-export type ViewMode = 'home' | 'all' | 'starred' | 'tag' | 'note';
+export type ViewMode = 'home' | 'all' | 'starred' | 'tag' | 'note' | 'planner';
 
 export function useViewNavigation() {
     const [viewMode, setViewMode] = useState<ViewMode>('home');

@@ -51,6 +51,7 @@ import {
   Folder,
   X,
   Upload,
+  Layers,
 } from 'lucide-react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { useExportWorkspace } from '@/hooks/useExport';
@@ -70,13 +71,14 @@ interface SettingsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type SettingsSection = 'profile' | 'appearance' | 'editor' | 'writing' | 'shortcuts' | 'storage' | 'language' | 'workspace';
+type SettingsSection = 'profile' | 'appearance' | 'editor' | 'writing' | 'widget' | 'shortcuts' | 'storage' | 'language' | 'workspace';
 
 const settingsSections: { id: SettingsSection; icon: React.ElementType; label: string }[] = [
   { id: 'profile', icon: UserCircle, label: 'settings.profile' },
   { id: 'appearance', icon: Palette, label: 'settings.theme' },
   { id: 'editor', icon: Type, label: 'settings.editor' },
   { id: 'writing', icon: Edit3, label: 'settings.writing' },
+  { id: 'widget', icon: Layers, label: 'settings.widget' },
   { id: 'shortcuts', icon: Keyboard, label: 'settings.shortcuts' },
   { id: 'storage', icon: HardDrive, label: 'settings.storage' },
   { id: 'language', icon: Globe, label: 'settings.language' },
@@ -87,7 +89,7 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
   const { t } = useTranslation();
   const { theme, setTheme } = useTheme();
   const { deleteWorkspace } = useAuth();
-  const { preferences, updateEditorPreference, updateStoragePreference, resetPreferences } = usePreferences();
+  const { preferences, updateEditorPreference, updateStoragePreference, updateWidgetPreference, resetPreferences } = usePreferences();
   const { exportAsJSON, exportAllAsMarkdown } = useExportWorkspace();
   const { importJSON, importMarkdown } = useImport();
 
@@ -340,6 +342,67 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
 
       case 'writing':
         return <WritingSettings />;
+
+      case 'widget':
+        return (
+          <div className="space-y-6">
+            <section className="space-y-4">
+              <div>
+                <h3 className="text-sm font-medium flex items-center gap-2">
+                  <Layers className="h-4 w-4" />
+                  {t('settings.widget')}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {t('settings.widget_desc')}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <label className="flex items-center justify-between rounded-lg border p-4 cursor-pointer hover:bg-muted/30 transition-colors">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium">{t('settings.widget_on_startup')}</p>
+                    <p className="text-xs text-muted-foreground">{t('settings.widget_on_startup_desc')}</p>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={preferences.widget.showWidgetOnStartup}
+                    onClick={() => updateWidgetPreference('showWidgetOnStartup', !preferences.widget.showWidgetOnStartup)}
+                    className={cn(
+                      'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+                      preferences.widget.showWidgetOnStartup ? 'bg-primary' : 'bg-input'
+                    )}
+                  >
+                    <span className={cn(
+                      'pointer-events-none inline-block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform',
+                      preferences.widget.showWidgetOnStartup ? 'translate-x-5' : 'translate-x-0'
+                    )} />
+                  </button>
+                </label>
+
+                <label className="flex items-center justify-between rounded-lg border p-4 cursor-pointer hover:bg-muted/30 transition-colors">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium">{t('settings.quick_capture_widget')}</p>
+                    <p className="text-xs text-muted-foreground">{t('settings.quick_capture_widget_desc')}</p>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={preferences.widget.quickCaptureAsWidget}
+                    onClick={() => updateWidgetPreference('quickCaptureAsWidget', !preferences.widget.quickCaptureAsWidget)}
+                    className={cn(
+                      'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+                      preferences.widget.quickCaptureAsWidget ? 'bg-primary' : 'bg-input'
+                    )}
+                  >
+                    <span className={cn(
+                      'pointer-events-none inline-block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform',
+                      preferences.widget.quickCaptureAsWidget ? 'translate-x-5' : 'translate-x-0'
+                    )} />
+                  </button>
+                </label>
+              </div>
+            </section>
+          </div>
+        );
 
       case 'shortcuts': {
         const modKey = navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';

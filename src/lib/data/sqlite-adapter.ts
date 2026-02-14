@@ -19,6 +19,20 @@ import type {
   NoteLinks,
   AuthResult,
   AvatarStyle,
+  DailyPlan,
+  Target,
+  TimeBlock,
+  CreateDailyPlanInput,
+  UpdateDailyPlanInput,
+  CreateTargetInput,
+  UpdateTargetInput,
+  CreateTimeBlockInput,
+  UpdateTimeBlockInput,
+  DailyPlanWithDetails,
+  TargetStatus,
+  TargetPriority,
+  TargetType,
+  TimeBlockType,
 } from './types';
 import type {
   NoteRow,
@@ -34,6 +48,9 @@ import type {
   ExistingLinkRow,
   VersionTimestampRow,
   VersionRestoreRow,
+  DailyPlanRow,
+  TargetRow,
+  TimeBlockRow,
 } from './sqlite-row-types';
 import {
   initDatabase,
@@ -80,6 +97,54 @@ function mapRowToLink(row: LinkRow): Link {
     source_note_id: row.source_note_id,
     target_note_id: row.target_note_id,
     user_id: row.user_id,
+    created_at: row.created_at,
+  };
+}
+
+function mapRowToDailyPlan(row: DailyPlanRow): DailyPlan {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    plan_date: row.plan_date,
+    review_notes: row.review_notes,
+    review_completed: Boolean(row.review_completed),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+function mapRowToTarget(row: TargetRow): Target {
+  let noteIds: string[] = [];
+  try { noteIds = JSON.parse(row.note_ids || '[]'); } catch { /* empty */ }
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    daily_plan_id: row.daily_plan_id,
+    title: row.title,
+    description: row.description,
+    target_type: row.target_type as TargetType,
+    estimated_minutes: row.estimated_minutes,
+    actual_minutes: row.actual_minutes,
+    status: row.status as TargetStatus,
+    priority: row.priority as TargetPriority,
+    note_ids: noteIds,
+    sort_order: row.sort_order,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+function mapRowToTimeBlock(row: TimeBlockRow): TimeBlock {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    daily_plan_id: row.daily_plan_id,
+    target_id: row.target_id,
+    start_time: row.start_time,
+    end_time: row.end_time,
+    block_type: row.block_type as TimeBlockType,
+    title: row.title,
+    color: row.color,
     created_at: row.created_at,
   };
 }
@@ -969,6 +1034,276 @@ export function createSQLiteAdapter(): DataAdapter {
           target_note_id: row.target_note_id,
           strength: row.strength,
         }));
+      },
+    },
+
+    planning: {
+      async getDailyPlan(date: string): Promise<DailyPlan | null> {
+        const userId = ensureUserId();
+        const db = await ensureDb();
+        const result = await db.select<DailyPlanRow[]>(
+          'SELECT * FROM daily_plans WHERE user_id = ? AND plan_date = ?',
+          [userId, date]
+        );
+        if (result.length === 0) return null;
+        return mapRowToDailyPlan(result[0]);
+      },
+
+      async getOrCreateDailyPlan(date: string): Promise<DailyPlan> {
+        const existing = await this.getDailyPlan(date);
+        if (existing) return existing;
+
+        const userId = ensureUserId();
+        const db = await ensureDb();
+        const id = generateUUID();
+        const now = getCurrentTimestamp();
+
+        await db.execute(
+          'INSERT INTO daily_plans (id, user_id, plan_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+          [id, userId, date, now, now]
+        );
+
+        return {
+          id,
+          user_id: userId,
+          plan_date: date,
+          review_notes: null,
+          review_completed: false,
+          created_at: now,
+          updated_at: now,
+        };
+      },
+
+      async updateDailyPlan(id: string, input: UpdateDailyPlanInput): Promise<DailyPlan> {
+        const db = await ensureDb();
+        const now = getCurrentTimestamp();
+        const updates: string[] = ['updated_at = ?'];
+        const values: (string | number | null)[] = [now];
+
+        if (input.review_notes !== undefined) {
+          updates.push('review_notes = ?');
+          values.push(input.review_notes);
+        }
+        if (input.review_completed !== undefined) {
+          updates.push('review_completed = ?');
+          values.push(input.review_completed ? 1 : 0);
+        }
+
+        values.push(id);
+        await db.execute(`UPDATE daily_plans SET ${updates.join(', ')} WHERE id = ?`, values);
+
+        const result = await db.select<DailyPlanRow[]>('SELECT * FROM daily_plans WHERE id = ?', [id]);
+        if (result.length === 0) throw new Error('Daily plan not found');
+        return mapRowToDailyPlan(result[0]);
+      },
+
+      async getDailyPlanWithDetails(date: string): Promise<DailyPlanWithDetails> {
+        const plan = await this.getOrCreateDailyPlan(date);
+
+        const targets = await this.getTargets(plan.id);
+        const timeBlocks = await this.getTimeBlocks(plan.id);
+
+        const totalTargets = targets.length;
+        const completedTargets = targets.filter(t => t.status === 'completed').length;
+        const completionRate = totalTargets > 0 ? (completedTargets / totalTargets) * 100 : 0;
+
+        return { ...plan, targets, timeBlocks, completionRate };
+      },
+
+      async getPlansInRange(startDate: string, endDate: string): Promise<DailyPlan[]> {
+        const userId = ensureUserId();
+        const db = await ensureDb();
+        const result = await db.select<DailyPlanRow[]>(
+          'SELECT * FROM daily_plans WHERE user_id = ? AND plan_date BETWEEN ? AND ? ORDER BY plan_date ASC',
+          [userId, startDate, endDate]
+        );
+        return result.map(mapRowToDailyPlan);
+      },
+
+      async getPlansInRangeWithDetails(startDate: string, endDate: string): Promise<DailyPlanWithDetails[]> {
+        const plans = await this.getPlansInRange(startDate, endDate);
+        const plansWithDetails: DailyPlanWithDetails[] = [];
+
+        for (const plan of plans) {
+          const targets = await this.getTargets(plan.id);
+          const timeBlocks = await this.getTimeBlocks(plan.id);
+
+          const totalTargets = targets.length;
+          const completedTargets = targets.filter(t => t.status === 'completed').length;
+          const completionRate = totalTargets > 0 ? (completedTargets / totalTargets) * 100 : 0;
+
+          plansWithDetails.push({ ...plan, targets, timeBlocks, completionRate });
+        }
+
+        return plansWithDetails;
+      },
+
+      async getTargets(dailyPlanId: string): Promise<Target[]> {
+        const db = await ensureDb();
+        const result = await db.select<TargetRow[]>(
+          'SELECT * FROM targets WHERE daily_plan_id = ? ORDER BY sort_order ASC, created_at ASC',
+          [dailyPlanId]
+        );
+        return result.map(mapRowToTarget);
+      },
+
+      async createTarget(input: CreateTargetInput): Promise<Target> {
+        const userId = ensureUserId();
+        const db = await ensureDb();
+        const id = generateUUID();
+        const now = getCurrentTimestamp();
+
+        const maxOrderResult = await db.select<{ max_order: number | null }[]>(
+          'SELECT MAX(sort_order) as max_order FROM targets WHERE daily_plan_id = ?',
+          [input.daily_plan_id]
+        );
+        const sortOrder = input.sort_order ?? ((maxOrderResult[0]?.max_order ?? -1) + 1);
+
+        await db.execute(
+          `INSERT INTO targets (id, user_id, daily_plan_id, title, description, target_type, estimated_minutes, status, priority, sort_order, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
+          [
+            id, userId, input.daily_plan_id, input.title,
+            input.description || null,
+            input.target_type || 'custom',
+            input.estimated_minutes || null,
+            input.priority || 'medium',
+            sortOrder, now, now,
+          ]
+        );
+
+        return {
+          id,
+          user_id: userId,
+          daily_plan_id: input.daily_plan_id,
+          title: input.title,
+          description: input.description || null,
+          target_type: (input.target_type || 'custom') as TargetType,
+          estimated_minutes: input.estimated_minutes || null,
+          actual_minutes: null,
+          status: 'pending',
+          priority: (input.priority || 'medium') as TargetPriority,
+          note_ids: [],
+          sort_order: sortOrder,
+          created_at: now,
+          updated_at: now,
+        };
+      },
+
+      async updateTarget(id: string, input: UpdateTargetInput): Promise<Target> {
+        const db = await ensureDb();
+        const now = getCurrentTimestamp();
+        const updates: string[] = ['updated_at = ?'];
+        const values: (string | number | null)[] = [now];
+
+        if (input.title !== undefined) { updates.push('title = ?'); values.push(input.title); }
+        if (input.description !== undefined) { updates.push('description = ?'); values.push(input.description); }
+        if (input.target_type !== undefined) { updates.push('target_type = ?'); values.push(input.target_type); }
+        if (input.estimated_minutes !== undefined) { updates.push('estimated_minutes = ?'); values.push(input.estimated_minutes); }
+        if (input.actual_minutes !== undefined) { updates.push('actual_minutes = ?'); values.push(input.actual_minutes); }
+        if (input.status !== undefined) { updates.push('status = ?'); values.push(input.status); }
+        if (input.priority !== undefined) { updates.push('priority = ?'); values.push(input.priority); }
+        if (input.note_ids !== undefined) { updates.push('note_ids = ?'); values.push(JSON.stringify(input.note_ids)); }
+        if (input.sort_order !== undefined) { updates.push('sort_order = ?'); values.push(input.sort_order); }
+
+        values.push(id);
+        await db.execute(`UPDATE targets SET ${updates.join(', ')} WHERE id = ?`, values);
+
+        const result = await db.select<TargetRow[]>('SELECT * FROM targets WHERE id = ?', [id]);
+        if (result.length === 0) throw new Error('Target not found');
+        return mapRowToTarget(result[0]);
+      },
+
+      async deleteTarget(id: string): Promise<void> {
+        const db = await ensureDb();
+        await db.execute('DELETE FROM targets WHERE id = ?', [id]);
+      },
+
+      async reorderTargets(dailyPlanId: string, orderedIds: string[]): Promise<void> {
+        const db = await ensureDb();
+        await db.execute('BEGIN TRANSACTION');
+        try {
+          for (let i = 0; i < orderedIds.length; i++) {
+            await db.execute(
+              'UPDATE targets SET sort_order = ?, updated_at = ? WHERE id = ? AND daily_plan_id = ?',
+              [i, getCurrentTimestamp(), orderedIds[i], dailyPlanId]
+            );
+          }
+          await db.execute('COMMIT');
+        } catch (err) {
+          await db.execute('ROLLBACK');
+          throw err;
+        }
+      },
+
+      async getTimeBlocks(dailyPlanId: string): Promise<TimeBlock[]> {
+        const db = await ensureDb();
+        const result = await db.select<TimeBlockRow[]>(
+          'SELECT * FROM time_blocks WHERE daily_plan_id = ? ORDER BY start_time ASC',
+          [dailyPlanId]
+        );
+        return result.map(mapRowToTimeBlock);
+      },
+
+      async createTimeBlock(input: CreateTimeBlockInput): Promise<TimeBlock> {
+        const userId = ensureUserId();
+        const db = await ensureDb();
+        const id = generateUUID();
+        const now = getCurrentTimestamp();
+
+        await db.execute(
+          `INSERT INTO time_blocks (id, user_id, daily_plan_id, target_id, start_time, end_time, block_type, title, color, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id, userId, input.daily_plan_id,
+            input.target_id || null,
+            input.start_time, input.end_time,
+            input.block_type || 'focus_work',
+            input.title || '',
+            input.color || '#6366f1',
+            now,
+          ]
+        );
+
+        return {
+          id,
+          user_id: userId,
+          daily_plan_id: input.daily_plan_id,
+          target_id: input.target_id || null,
+          start_time: input.start_time,
+          end_time: input.end_time,
+          block_type: (input.block_type || 'focus_work') as TimeBlockType,
+          title: input.title || '',
+          color: input.color || '#6366f1',
+          created_at: now,
+        };
+      },
+
+      async updateTimeBlock(id: string, input: UpdateTimeBlockInput): Promise<TimeBlock> {
+        const db = await ensureDb();
+        const updates: string[] = [];
+        const values: (string | number | null)[] = [];
+
+        if (input.target_id !== undefined) { updates.push('target_id = ?'); values.push(input.target_id); }
+        if (input.start_time !== undefined) { updates.push('start_time = ?'); values.push(input.start_time); }
+        if (input.end_time !== undefined) { updates.push('end_time = ?'); values.push(input.end_time); }
+        if (input.block_type !== undefined) { updates.push('block_type = ?'); values.push(input.block_type); }
+        if (input.title !== undefined) { updates.push('title = ?'); values.push(input.title); }
+        if (input.color !== undefined) { updates.push('color = ?'); values.push(input.color); }
+
+        if (updates.length > 0) {
+          values.push(id);
+          await db.execute(`UPDATE time_blocks SET ${updates.join(', ')} WHERE id = ?`, values);
+        }
+
+        const result = await db.select<TimeBlockRow[]>('SELECT * FROM time_blocks WHERE id = ?', [id]);
+        if (result.length === 0) throw new Error('Time block not found');
+        return mapRowToTimeBlock(result[0]);
+      },
+
+      async deleteTimeBlock(id: string): Promise<void> {
+        const db = await ensureDb();
+        await db.execute('DELETE FROM time_blocks WHERE id = ?', [id]);
       },
     },
   };
