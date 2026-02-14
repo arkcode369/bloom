@@ -47,6 +47,9 @@
     "core:window:allow-destroy",
     "core:webview:allow-get-all-webviews",
     "core:webview:allow-webview-close",
-    "core:event:default"
+    "core:event:default",
+    "updater:default",
+    "process:allow-restart",
+    "process:allow-exit"
   ]
 }

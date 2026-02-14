@@ -52,12 +52,17 @@ import {
   X,
   Upload,
   Layers,
+  Info,
+  RefreshCw,
+  CheckCircle,
 } from 'lucide-react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { useExportWorkspace } from '@/hooks/useExport';
 import { useImport } from '@/hooks/useImport';
+import { useAutoUpdate } from '@/hooks/useAutoUpdate';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import ProfileEditor from '@/components/profile/ProfileEditor';
@@ -71,7 +76,7 @@ interface SettingsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type SettingsSection = 'profile' | 'appearance' | 'editor' | 'writing' | 'widget' | 'shortcuts' | 'storage' | 'language' | 'workspace';
+type SettingsSection = 'profile' | 'appearance' | 'editor' | 'writing' | 'widget' | 'shortcuts' | 'storage' | 'language' | 'workspace' | 'about';
 
 const settingsSections: { id: SettingsSection; icon: React.ElementType; label: string }[] = [
   { id: 'profile', icon: UserCircle, label: 'settings.profile' },
@@ -83,6 +88,7 @@ const settingsSections: { id: SettingsSection; icon: React.ElementType; label: s
   { id: 'storage', icon: HardDrive, label: 'settings.storage' },
   { id: 'language', icon: Globe, label: 'settings.language' },
   { id: 'workspace', icon: Shield, label: 'settings.workspace' },
+  { id: 'about', icon: Info, label: 'settings.about' },
 ];
 
 export default function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
@@ -92,6 +98,7 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
   const { preferences, updateEditorPreference, updateStoragePreference, updateWidgetPreference, resetPreferences } = usePreferences();
   const { exportAsJSON, exportAllAsMarkdown } = useExportWorkspace();
   const { importJSON, importMarkdown } = useImport();
+  const updateStatus = useAutoUpdate();
 
   const [activeSection, setActiveSection] = useState<SettingsSection>('profile');
 
@@ -582,6 +589,116 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
                 >
                   {t('common.delete')}
                 </Button>
+              </div>
+            </section>
+          </div>
+        );
+
+      case 'about':
+        return (
+          <div className="space-y-6">
+            {/* App Info */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <span className="text-2xl">🌸</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold">Bloom Notes</h3>
+                  <p className="text-sm text-muted-foreground">
+                    v{updateStatus.currentVersion || '...'}
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Personal knowledge management with bidirectional links, knowledge graph visualization, and offline-first architecture.
+              </p>
+            </section>
+
+            <Separator />
+
+            {/* Update Section */}
+            <section className="space-y-4">
+              <h3 className="text-sm font-medium flex items-center gap-2">
+                <RefreshCw className="h-4 w-4" />
+                Updates
+              </h3>
+
+              {updateStatus.readyToInstall && (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                    <CheckCircle className="h-4 w-4" />
+                    Update v{updateStatus.availableVersion} ready to install
+                  </div>
+                  <Button size="sm" onClick={updateStatus.installAndRelaunch}>
+                    Restart & Update
+                  </Button>
+                </div>
+              )}
+
+              {updateStatus.downloading && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Downloading v{updateStatus.availableVersion}...</span>
+                    <span className="text-muted-foreground">{updateStatus.progress}%</span>
+                  </div>
+                  <Progress value={updateStatus.progress} className="h-2" />
+                </div>
+              )}
+
+              {!updateStatus.readyToInstall && !updateStatus.downloading && (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      {updateStatus.checking
+                        ? 'Checking for updates...'
+                        : updateStatus.error
+                          ? 'Could not check for updates'
+                          : 'App is up to date'}
+                    </p>
+                    {updateStatus.error && (
+                      <p className="text-xs text-destructive mt-1">{updateStatus.error}</p>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={updateStatus.checkNow}
+                    disabled={updateStatus.checking}
+                    className="gap-2"
+                  >
+                    {updateStatus.checking ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    )}
+                    Check for Updates
+                  </Button>
+                </div>
+              )}
+            </section>
+
+            <Separator />
+
+            {/* Links */}
+            <section className="space-y-3">
+              <div className="flex flex-col gap-2 text-sm">
+                <a
+                  href="https://github.com/srikresna/bloom-brain"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-1.5"
+                >
+                  GitHub Repository ↗
+                </a>
+                <a
+                  href="https://github.com/srikresna/bloom-brain/releases"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-1.5"
+                >
+                  Release Notes ↗
+                </a>
               </div>
             </section>
           </div>

@@ -15,12 +15,16 @@ import NotFound from "./pages/NotFound";
 import { WidgetPage } from "./pages/WidgetPage";
 import { QuickCapturePage } from "./pages/QuickCapturePage";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
 const AppContent = () => {
   const { loading, isOnboarded } = useAuth();
+
+  // Silent background auto-update
+  useAutoUpdate();
 
   if (loading) {
     return (
