@@ -13,6 +13,16 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            // Disable devtools in production
+            #[cfg(not(debug_assertions))]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    #[cfg(target_os = "windows")]
+                    window.set_decorations(true).ok();
+                }
+            }
+
+            // Open devtools in development
             #[cfg(debug_assertions)]
             {
                 let window = app.get_webview_window("main").unwrap();
