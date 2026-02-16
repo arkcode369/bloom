@@ -139,7 +139,7 @@ export default function Index() {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full">
+      <div className="flex h-screen w-full overflow-hidden">
         <AppSidebar
           selectedNoteId={nav.selectedNoteId}
           onSelectNote={nav.handleSelectNote}
@@ -171,7 +171,7 @@ export default function Index() {
             </div>
           </header>
 
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden relative flex flex-col">
             {nav.viewMode === 'note' && selectedNote ? (
               <NoteEditor
                 note={selectedNote}

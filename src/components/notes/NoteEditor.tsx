@@ -8,11 +8,17 @@ import BlockNoteEditorComponent from '@/components/editor/BlockNoteEditor';
 import BacklinksPanel from '@/components/notes/BacklinksPanel';
 import NoteTags from '@/components/tags/NoteTags';
 import NoteCover from '@/components/notes/NoteCover';
-import TableOfContents from '@/components/notes/TableOfContents';
+import { TableOfContentsContent } from '@/components/notes/TableOfContents';
 import WritingStats from '@/components/notes/WritingStats';
 import VersionHistoryPanel from '@/components/notes/VersionHistoryPanel';
 import { Button } from '@/components/ui/button';
-import { Star, Pin, PinOff, Download, Archive, Trash2, ArrowLeft, PanelRightOpen, PanelRightClose, Maximize2, Minimize2, Check, Loader2, ExternalLink, History, Clock } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { List, Star, Pin, PinOff, Download, Archive, Trash2, ArrowLeft, PanelRightOpen, PanelRightClose, Maximize2, Minimize2, Check, Loader2, ExternalLink, History, Clock } from 'lucide-react';
 import { useTogglePin } from '@/hooks/useNotes';
 import { useExportNote } from '@/hooks/useExport';
 import { cn } from '@/lib/utils';
@@ -220,28 +226,22 @@ export default function NoteEditor({
       animate={{ opacity: 1 }}
       transition={{ duration: 0.2 }}
     >
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Toolbar */}
-        <motion.div
-          className="flex items-center justify-between px-4 py-2 border-b bg-card shrink-0"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, delay: 0.1 }}
-        >
-          <div className="flex items-center gap-2">
+      <div className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden relative border-r h-full">
+        {/* Toolbar - FIXED HEADER (Does not scroll) */}
+        <header className="h-14 border-b bg-background/95 backdrop-blur-md flex items-center justify-between px-4 shrink-0 z-50 shadow-sm">
+          <div className="flex items-center gap-2 overflow-hidden">
             {onBack && (
               <Button variant="ghost" size="icon" onClick={onBack} className="lg:hidden shrink-0">
                 <ArrowLeft className="h-5 w-5" />
               </Button>
             )}
             <NoteTags noteId={note.id} />
-            <WritingStats noteId={note.id} content={content} className="hidden md:flex" />
-            {/* Save status indicator */}
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground ml-2">
+            <WritingStats noteId={note.id} content={content} className="hidden md:flex shrink-0" />
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground ml-2 shrink-0">
               {updateNote.isPending ? (
                 <><Loader2 className="h-3 w-3 animate-spin" /><span>Saving...</span></>
               ) : hasUnsavedChanges ? (
-                <span className="text-amber-500">Unsaved changes</span>
+                <span className="text-amber-500 font-medium">Unsaved</span>
               ) : lastSavedAt ? (
                 <><Check className="h-3 w-3 text-primary" /><span>Saved</span></>
               ) : null}
@@ -249,7 +249,17 @@ export default function NoteEditor({
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
-            {/* Full width toggle */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8" title="Table of Contents">
+                  <List className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72 p-0">
+                <TableOfContentsContent content={content} onItemClick={() => { }} />
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <Button
               variant="ghost"
               size="icon"
@@ -263,13 +273,7 @@ export default function NoteEditor({
                 <Maximize2 className="h-4 w-4 text-muted-foreground" />
               )}
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handlePopOut}
-              className="h-8 w-8"
-              title="Pop out in new window"
-            >
+            <Button variant="ghost" size="icon" onClick={handlePopOut} className="h-8 w-8" title="Pop out in new window">
               <ExternalLink className="h-4 w-4 text-muted-foreground" />
             </Button>
             <Button
@@ -294,99 +298,47 @@ export default function NoteEditor({
                 <PanelRightOpen className="h-4 w-4 text-muted-foreground" />
               )}
             </Button>
-            <motion.div whileTap={{ scale: 0.9 }}>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onToggleStar}
-                className="h-8 w-8"
-                title={note.is_starred ? t('notes.unstar') : t('notes.star')}
-              >
-                <motion.div
-                  animate={note.is_starred ? { scale: [1, 1.3, 1] } : {}}
-                  transition={{ duration: 0.3 }}
-                >
-                  <Star
-                    className={cn(
-                      'h-4 w-4 transition-colors',
-                      note.is_starred ? 'fill-primary text-primary' : 'text-muted-foreground'
-                    )}
-                  />
-                </motion.div>
-              </Button>
-            </motion.div>
-
-            <motion.div whileTap={{ scale: 0.9 }}>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => togglePin.mutate({ id: note.id, is_pinned: !note.is_pinned })}
-                className="h-8 w-8"
-                title={note.is_pinned ? t('notes.unpin') : t('notes.pin')}
-              >
-                <motion.div
-                  animate={note.is_pinned ? { scale: [1, 1.3, 1] } : {}}
-                  transition={{ duration: 0.3 }}
-                >
-                  <Pin
-                    className={cn(
-                      'h-4 w-4 transition-colors',
-                      note.is_pinned ? 'fill-sky-500 text-sky-500 -rotate-45' : 'text-muted-foreground'
-                    )}
-                  />
-                </motion.div>
-              </Button>
-            </motion.div>
-
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => exportAsMarkdown(note)}
+              onClick={onToggleStar}
               className="h-8 w-8"
-              title={t('editor.export_markdown')}
+              title={note.is_starred ? t('notes.unstar') : t('notes.star')}
             >
+              <Star className={cn('h-4 w-4', note.is_starred ? 'fill-primary text-primary' : 'text-muted-foreground')} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => togglePin.mutate({ id: note.id, is_pinned: !note.is_pinned })}
+              className="h-8 w-8"
+              title={note.is_pinned ? t('notes.unpin') : t('notes.pin')}
+            >
+              <Pin className={cn('h-4 w-4', note.is_pinned ? 'fill-sky-500 text-sky-500 -rotate-45' : 'text-muted-foreground')} />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => exportAsMarkdown(note)} className="h-8 w-8" title={t('editor.export_markdown')}>
               <Download className="h-4 w-4 text-muted-foreground" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onArchive}
-              className="h-8 w-8"
-            >
+            <Button variant="ghost" size="icon" onClick={onArchive} className="h-8 w-8">
               <Archive className="h-4 w-4 text-muted-foreground" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onDelete}
-              className="h-8 w-8 text-destructive hover:text-destructive"
-            >
+            <Button variant="ghost" size="icon" onClick={onDelete} className="h-8 w-8 text-destructive hover:text-destructive">
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
-        </motion.div>
+        </header>
 
         {/* Scrollable content area */}
-        <div className="flex-1 overflow-auto bg-background">
+        <ScrollArea className="flex-1 bg-background selection:bg-primary/10">
           <AnimatePresence mode="wait">
             <motion.div
               key={note.id}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{
-                duration: 0.2,
-                ease: [0.25, 0.46, 0.45, 0.94]
-              }}
-              className="h-full flex flex-col relative"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="pb-20"
             >
-              {/* Floating Table of Contents - Right side */}
-              <div className="absolute right-4 top-24 z-40 hidden lg:block">
-                <div className="sticky top-4">
-                  <TableOfContents content={content} />
-                </div>
-              </div>
-
               {/* Cover Image */}
               <NoteCover coverImage={coverImage} onCoverChange={handleCoverChange} />
 
@@ -403,7 +355,7 @@ export default function NoteEditor({
                   onKeyDown={handleTitleKeyDown}
                   placeholder={t('editor.untitled')}
                   rows={1}
-                  className="w-full text-4xl font-bold bg-transparent border-0 resize-none focus:outline-none focus:ring-0 py-6 placeholder:text-muted-foreground/40"
+                  className="w-full text-4xl font-bold bg-transparent border-0 resize-none focus:outline-none focus:ring-0 py-6 placeholder:text-muted-foreground/40 whitespace-pre-wrap break-words"
                   style={{
                     overflow: 'hidden',
                     minHeight: '3.5rem',
@@ -443,10 +395,9 @@ export default function NoteEditor({
               </div>
             </motion.div>
           </AnimatePresence>
-        </div>
+        </ScrollArea>
       </div>
 
-      {/* Backlinks Panel */}
       <AnimatePresence>
         {showBacklinks && (
           <motion.aside

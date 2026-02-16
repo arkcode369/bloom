@@ -8,8 +8,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDataAdapter } from '@/lib/data/DataProvider';
 import { useCreateTarget, useUpdateTarget } from '@/hooks/usePlanning';
 import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { emit } from '@tauri-apps/api/event';
 import type { TargetStatus, Note } from '@/lib/data/types';
-import { extractPlainText } from '@/components/editor/blockUtils';
+import { extractPlainText, hasRichContent, getContentPreview } from '@/components/editor/blockUtils';
 
 const WIDGET_FULL_SIZE = { width: 280, height: 400 };
 const WIDGET_MINIMIZED_SIZE = { width: 52, height: 52 };
@@ -102,6 +103,20 @@ async function openQuickCaptureWidget() {
     console.log('Quick capture window created');
   } catch (e) {
     console.error('Failed to open quick capture:', e);
+  }
+}
+
+async function openNoteInMain(noteId: string) {
+  console.log('Opening note in main window:', noteId);
+  try {
+    await openMainWindow();
+    // Give the main window time to fully open/focus
+    setTimeout(async () => {
+      await emit('navigate-to-note', { noteId });
+      console.log('Emitted navigate-to-note event');
+    }, 100);
+  } catch (e) {
+    console.error('Failed to open note in main:', e);
   }
 }
 
@@ -654,27 +669,64 @@ export function PlannerWidget() {
                     {/* Notes list */}
                     <div className="flex-1 overflow-y-auto px-1.5 pb-1.5">
                       {recentNotes && recentNotes.length > 0 ? (
-                        recentNotes.map((note, idx) => (
-                          <motion.div
-                            key={note.id}
-                            initial={{ opacity: 0, x: -8 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: idx * 0.02 }}
-                            onClick={() => openNoteInline(note)}
-                            className="flex items-center gap-1.5 py-1 px-1.5 rounded-md cursor-pointer transition-all hover:bg-muted/40 group"
-                          >
-                            <FileText className="w-3 h-3 shrink-0 text-muted-foreground/60" />
-                            <div className="flex-1 min-w-0">
-                              <span className="text-[11px] truncate leading-tight block text-foreground/90">
-                                {note.title || 'Untitled'}
-                              </span>
-                              <span className="text-[9px] text-muted-foreground/50">
-                                {formatTimeAgo(note.updated_at)}
-                              </span>
-                            </div>
-                            <ChevronRight className="w-2.5 h-2.5 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </motion.div>
-                        ))
+                        recentNotes.map((note, idx) => {
+                          const richCheck = hasRichContent(note.content, note.cover_image);
+                          const isRich = richCheck.hasRich;
+                          
+                          return (
+                            <motion.div
+                              key={note.id}
+                              initial={{ opacity: 0, x: -8 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: idx * 0.02 }}
+                              className={cn(
+                                "py-1.5 px-1.5 rounded-md transition-all mb-1",
+                                isRich ? "bg-muted/20 border border-border/30" : "cursor-pointer hover:bg-muted/40 group"
+                              )}
+                              onClick={isRich ? undefined : () => openNoteInline(note)}
+                            >
+                              <div className="flex items-start gap-1.5">
+                                <FileText className="w-3 h-3 shrink-0 text-muted-foreground/60 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-1">
+                                    <span className="text-[11px] truncate leading-tight block text-foreground/90 font-medium">
+                                      {note.title || 'Untitled'}
+                                    </span>
+                                    {!isRich && (
+                                      <ChevronRight className="w-2.5 h-2.5 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                                    )}
+                                  </div>
+                                  <span className="text-[9px] text-muted-foreground/50 block mt-0.5">
+                                    {formatTimeAgo(note.updated_at)}
+                                  </span>
+                                  
+                                  {isRich && (
+                                    <>
+                                      <div className="text-[10px] text-muted-foreground/60 mt-1 line-clamp-2 leading-relaxed">
+                                        {getContentPreview(note.content, 80)}
+                                      </div>
+                                      <div className="flex items-center gap-1.5 mt-1.5">
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary/90 border border-primary/20">
+                                          📎 Rich Content
+                                        </span>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openNoteInMain(note.id);
+                                          }}
+                                          className="ml-auto text-[9px] px-1.5 py-0.5 rounded bg-background hover:bg-muted/50 border border-border/50 text-foreground/80 transition-colors flex items-center gap-1"
+                                        >
+                                          <ExternalLink className="w-2.5 h-2.5" />
+                                          Open in Bloom
+                                        </button>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })
                       ) : (
                         <div className="flex items-center justify-center py-4 text-[11px] text-muted-foreground/50">
                           No notes yet

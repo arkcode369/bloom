@@ -254,6 +254,76 @@ export function extractPlainText(blocks: Block[]): string {
   return textParts.join('').trim();
 }
 
+// Check if note has rich content that would be lost in plain text
+export function hasRichContent(content: string | null, coverImage: string | null = null): { hasRich: boolean; types: string[] } {
+  const types: string[] = [];
+  
+  // Check cover image
+  if (coverImage) {
+    types.push('cover_image');
+  }
+  
+  if (!content) return { hasRich: types.length > 0, types };
+  
+  try {
+    const parsed = JSON.parse(content);
+    if (!Array.isArray(parsed)) return { hasRich: types.length > 0, types };
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function hasInlineFormatting(content: any): boolean {
+      if (!content) return false;
+      if (Array.isArray(content)) {
+        return content.some(item => {
+          if (typeof item === 'object') {
+            // Check for styled text (bold, italic, etc.)
+            if (item.styles && Object.keys(item.styles).length > 0) return true;
+            // Check for links
+            if (item.type === 'link' && item.href) return true;
+            // Recursively check nested content
+            if (item.content) return hasInlineFormatting(item.content);
+          }
+          return false;
+        });
+      }
+      return false;
+    }
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function checkBlock(block: any): void {
+      if (!block) return;
+      
+      // Check block type
+      if (block.type === 'image') {
+        if (!types.includes('image')) types.push('image');
+      } else if (block.type === 'table') {
+        if (!types.includes('table')) types.push('table');
+      } else if (block.type === 'codeBlock') {
+        if (!types.includes('code')) types.push('code');
+      } else if (block.type === 'heading') {
+        if (!types.includes('heading')) types.push('heading');
+      } else if (block.type === 'checkListItem') {
+        if (!types.includes('checklist')) types.push('checklist');
+      }
+      
+      // Check for inline formatting in content
+      if (block.content && hasInlineFormatting(block.content)) {
+        if (!types.includes('formatting')) types.push('formatting');
+      }
+      
+      // Check nested children
+      if (block.children && Array.isArray(block.children)) {
+        block.children.forEach(checkBlock);
+      }
+    }
+    
+    parsed.forEach(checkBlock);
+  } catch {
+    // If parsing fails, assume it's not rich content (legacy plain text)
+  }
+  
+  return { hasRich: types.length > 0, types };
+}
+
 // Get a preview of note content (handles both BlockNote JSON and legacy markdown)
 export function getContentPreview(content: string | null, maxLength: number = 100): string {
   if (!content) return '';

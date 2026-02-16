@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { List } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-interface HeadingItem {
+export interface HeadingItem {
   id: string;
   text: string;
   level: number;
@@ -12,14 +12,15 @@ interface HeadingItem {
 interface TableOfContentsProps {
   content: string | null;
   className?: string;
+  onItemClick?: () => void;
 }
 
-function extractHeadingsFromBlocks(blocks: any[]): HeadingItem[] {
+export function extractHeadingsFromBlocks(blocks: any[]): HeadingItem[] {
   const headings: HeadingItem[] = [];
-  
+
   function traverseBlocks(block: any) {
     if (!block) return;
-    
+
     if (block.type === 'heading' && block.props?.level) {
       let text = '';
       if (block.content) {
@@ -31,7 +32,7 @@ function extractHeadingsFromBlocks(blocks: any[]): HeadingItem[] {
           text = block.content;
         }
       }
-      
+
       if (text.trim()) {
         headings.push({
           id: block.id || `heading-${headings.length}`,
@@ -40,23 +41,28 @@ function extractHeadingsFromBlocks(blocks: any[]): HeadingItem[] {
         });
       }
     }
-    
+
     if (block.children && Array.isArray(block.children)) {
       block.children.forEach(traverseBlocks);
     }
   }
-  
+
   blocks.forEach(traverseBlocks);
   return headings;
 }
 
-export default function TableOfContents({ content, className }: TableOfContentsProps) {
-  const [isHovered, setIsHovered] = useState(false);
+export function TableOfContentsContent({
+  content,
+  onItemClick
+}: {
+  content: string | null;
+  onItemClick?: () => void;
+}) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const headings = useMemo(() => {
     if (!content) return [];
-    
+
     try {
       const parsed = JSON.parse(content);
       if (Array.isArray(parsed)) {
@@ -66,7 +72,7 @@ export default function TableOfContents({ content, className }: TableOfContentsP
       // Parse markdown headings
       const lines = content.split('\n');
       const mdHeadings: HeadingItem[] = [];
-      
+
       lines.forEach((line, index) => {
         const match = line.match(/^(#{1,3})\s+(.+)/);
         if (match) {
@@ -77,10 +83,10 @@ export default function TableOfContents({ content, className }: TableOfContentsP
           });
         }
       });
-      
+
       return mdHeadings;
     }
-    
+
     return [];
   }, [content]);
 
@@ -88,18 +94,85 @@ export default function TableOfContents({ content, className }: TableOfContentsP
     // Find the heading in the editor
     const editorContainer = document.querySelector('.bn-editor');
     if (!editorContainer) return;
-    
+
     // Find heading elements
     const headingElements = editorContainer.querySelectorAll('h1, h2, h3');
-    
+
     for (const el of headingElements) {
       if (el.textContent?.trim() === headingText) {
         el.scrollIntoView({ behavior: 'smooth', block: 'start' });
         setActiveId(headingText);
+        onItemClick?.();
         break;
       }
     }
   };
+
+  if (headings.length === 0) {
+    return (
+      <div className="p-4 text-center text-sm text-muted-foreground">
+        No headings found
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-3">
+      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border">
+        <List className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Outline
+        </span>
+      </div>
+
+      <nav className="space-y-0.5 max-h-[60vh] overflow-y-auto pr-1">
+        {headings.map((heading, index) => (
+          <button
+            key={index}
+            onClick={() => scrollToHeading(heading.text)}
+            className={cn(
+              'block w-full text-left text-sm py-1.5 px-2 rounded-md transition-colors',
+              'hover:bg-muted truncate',
+              activeId === heading.text && 'bg-muted text-primary font-medium',
+              heading.level === 1 && 'font-medium text-foreground',
+              heading.level === 2 && 'pl-4 text-muted-foreground',
+              heading.level === 3 && 'pl-6 text-muted-foreground/80 text-xs'
+            )}
+            title={heading.text}
+          >
+            {heading.text}
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+export default function TableOfContents({ content, className }: TableOfContentsProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const headings = useMemo(() => {
+    if (!content) return [];
+    try {
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) return extractHeadingsFromBlocks(parsed);
+    } catch {
+      const lines = content.split('\n');
+      const mdHeadings: HeadingItem[] = [];
+      lines.forEach((line, index) => {
+        const match = line.match(/^(#{1,3})\s+(.+)/);
+        if (match) {
+          mdHeadings.push({
+            id: `md-heading-${index}`,
+            text: match[2].trim(),
+            level: match[1].length,
+          });
+        }
+      });
+      return mdHeadings;
+    }
+    return [];
+  }, [content]);
 
   if (headings.length === 0) {
     return null;
@@ -133,40 +206,13 @@ export default function TableOfContents({ content, className }: TableOfContentsP
             transition={{ duration: 0.15, ease: 'easeOut' }}
             className={cn(
               'absolute right-full top-0 mr-2',
-              'w-56 max-h-80 overflow-y-auto',
+              'w-56 overflow-hidden',
               'bg-popover/95 backdrop-blur-sm',
               'border border-border rounded-lg shadow-lg',
               'z-50'
             )}
           >
-            <div className="p-3">
-              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border">
-                <List className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Outline
-                </span>
-              </div>
-              
-              <nav className="space-y-0.5">
-                {headings.map((heading, index) => (
-                  <button
-                    key={index}
-                    onClick={() => scrollToHeading(heading.text)}
-                    className={cn(
-                      'block w-full text-left text-sm py-1.5 px-2 rounded-md transition-colors',
-                      'hover:bg-muted truncate',
-                      activeId === heading.text && 'bg-muted text-primary font-medium',
-                      heading.level === 1 && 'font-medium text-foreground',
-                      heading.level === 2 && 'pl-4 text-muted-foreground',
-                      heading.level === 3 && 'pl-6 text-muted-foreground/80 text-xs'
-                    )}
-                    title={heading.text}
-                  >
-                    {heading.text}
-                  </button>
-                ))}
-              </nav>
-            </div>
+            <TableOfContentsContent content={content} />
           </motion.div>
         )}
       </AnimatePresence>
