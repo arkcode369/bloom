@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, lazy, Suspense, useMemo } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import * as d3 from 'd3';
 import { useGraphData, GraphNode } from '@/hooks/useGraphData';
 import { useNotes } from '@/hooks/useNotes';
@@ -45,6 +46,13 @@ export default function KnowledgeGraph({
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
+  const [brushMode, setBrushMode] = useState(false);
+  const [brushSelectedIds, setBrushSelectedIds] = useState<Set<string>>(new Set());
+  const brushModeRef = useRef(false);
+  useEffect(() => { brushModeRef.current = brushMode; }, [brushMode]);
+
+  // Ref to call zoomToFit on the 3D graph imperatively
+  const graph3dFitRef = useRef<(() => void) | null>(null);
 
   // Build note contents map for tooltips
   const noteContents = useMemo(() => {
@@ -121,7 +129,7 @@ export default function KnowledgeGraph({
   const adjacencyMapRef = useRef<Map<string, Set<string>>>(new Map());
   // Store D3 node selection ref for dynamic updates
   const nodeSelectionRef = useRef<d3.Selection<SVGGElement, SimNode, SVGGElement, unknown> | null>(null);
-  const linkSelectionRef = useRef<d3.Selection<SVGLineElement, SimLink, SVGGElement, unknown> | null>(null);
+  const linkSelectionRef = useRef<d3.Selection<SVGPathElement, SimLink, SVGGElement, unknown> | null>(null);
   const simNodesRef = useRef<SimNode[]>([]);
   // Preserve node positions across React Query refetches
   const prevSimNodesRef = useRef<SimNode[]>([]);
@@ -247,9 +255,10 @@ export default function KnowledgeGraph({
     // Domain hulls group (rendered behind everything)
     const hullsGroup = g.append('g').attr('class', 'hulls');
 
-    // Setup zoom behavior
+    // Setup zoom behavior with translateExtent to keep user near the graph
     const zoomBehavior = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 4])
+      .translateExtent([[-width * 1.5, -height * 1.5], [width * 2.5, height * 2.5]])
       .on('zoom', (event) => {
         g.attr('transform', event.transform);
         setZoom(event.transform.k);
@@ -258,29 +267,16 @@ export default function KnowledgeGraph({
     zoomBehaviorRef.current = zoomBehavior;
     svg.call(zoomBehavior);
 
-    // Custom cluster force
-    const clusterForce = (alpha: number) => {
-      const strength = 0.15 * alpha;
-      const vt = visibleTagsRef.current;
-      for (const node of simNodes) {
-        if (node.primaryTag && vt.has(node.primaryTag.id)) {
-          const center = tagCenters.get(node.primaryTag.id);
-          if (center) {
-            node.vx = (node.vx || 0) + (center.x - (node.x || 0)) * strength;
-            node.vy = (node.vy || 0) + (center.y - (node.y || 0)) * strength;
-          }
-        }
-      }
-    };
-
     // Adaptive spacing based on node count
     const nodeCount = simNodes.length;
-    const chargeStrength = nodeCount <= 10 ? -100 : nodeCount <= 30 ? -150 : -200;
-    const linkDistance = nodeCount <= 10 ? 50 : nodeCount <= 30 ? 65 : 80;
-    const collisionRadius = nodeCount <= 10 ? 15 : nodeCount <= 30 ? 20 : 25;
-    const centerStrength = nodeCount <= 10 ? 0.15 : nodeCount <= 30 ? 0.1 : 0.05;
+    const chargeStrength = nodeCount <= 10 ? -120 : nodeCount <= 30 ? -180 : -240;
+    const linkDistance = nodeCount <= 10 ? 55 : nodeCount <= 30 ? 70 : 90;
+    const collisionRadius = nodeCount <= 10 ? 16 : nodeCount <= 30 ? 22 : 28;
+    const centerStrength = nodeCount <= 10 ? 0.12 : nodeCount <= 30 ? 0.08 : 0.04;
+    const clusterStrength = nodeCount <= 10 ? 0.25 : nodeCount <= 30 ? 0.18 : 0.12;
 
-    // Create simulation with adaptive forces
+    // Build per-node target positions driven by tag cluster centers
+    // Using d3.forceX / forceY is more stable than a custom velocity-mutation force
     const simulation = d3.forceSimulation<SimNode>(simNodes)
       .force('link', d3.forceLink<SimNode, SimLink>(simLinks)
         .id(d => d.id)
@@ -288,22 +284,38 @@ export default function KnowledgeGraph({
         .strength(0.5))
       .force('charge', d3.forceManyBody().strength(chargeStrength))
       .force('center', d3.forceCenter(width / 2, height / 2).strength(centerStrength))
-      .force('collision', d3.forceCollide().radius(collisionRadius))
-      .force('cluster', clusterForce)
-      .force('radial', d3.forceRadial(
-        Math.min(width, height) / 4 * (nodeCount <= 10 ? 0.5 : 1),
-        width / 2,
-        height / 2
-      ).strength(nodeCount <= 10 ? 0.08 : 0.02));
+      .force('collision', d3.forceCollide<SimNode>().radius(collisionRadius).strength(0.8))
+      .force('x', d3.forceX<SimNode>(d => {
+        if (d.primaryTag) {
+          const c = tagCenters.get(d.primaryTag.id);
+          if (c) return c.x;
+        }
+        return width / 2;
+      }).strength(clusterStrength))
+      .force('y', d3.forceY<SimNode>(d => {
+        if (d.primaryTag) {
+          const c = tagCenters.get(d.primaryTag.id);
+          if (c) return c.y;
+        }
+        return height / 2;
+      }).strength(clusterStrength))
+      .stop();
 
     simulationRef.current = simulation;
+
+    // Pre-run ticks when graph is newly loaded so initial render looks settled
+    const hasNewNodes = simNodes.some(n => !prevNodesMap.has(n.id));
+    if (hasNewNodes) {
+      for (let i = 0; i < 150; ++i) simulation.tick();
+    }
 
     // Draw links
     const link = g.append('g')
       .attr('class', 'links')
-      .selectAll('line')
+      .selectAll<SVGPathElement, SimLink>('path')
       .data(simLinks)
-      .join('line')
+      .join('path')
+      .attr('fill', 'none')
       .attr('stroke', 'hsl(var(--muted-foreground))')
       .attr('stroke-opacity', d => {
         const strength = (d as SimLink & { strength?: number }).strength ?? 1.0;
@@ -336,9 +348,18 @@ export default function KnowledgeGraph({
         })
         .on('end', (event, d) => {
           if (!event.active) simulation.alphaTarget(0);
-          d.fx = null;
-          d.fy = null;
+          // Pin the node in place after dragging
+          d.fx = event.x;
+          d.fy = event.y;
         }));
+
+    // Double-click on a node to unpin it and let it float freely again
+    node.on('dblclick', (event, d) => {
+      event.stopPropagation();
+      d.fx = null;
+      d.fy = null;
+      simulation.alpha(0.2).restart();
+    });
 
     // Store node selection ref for dynamic updates
     nodeSelectionRef.current = node as any;
@@ -556,12 +577,19 @@ export default function KnowledgeGraph({
 
     // Update positions on simulation tick
     let tickCount = 0;
+    simulation.alpha(hasNewNodes ? 0.1 : 0.5).restart();
+
     simulation.on('tick', () => {
-      link
-        .attr('x1', d => (d.source as SimNode).x || 0)
-        .attr('y1', d => (d.source as SimNode).y || 0)
-        .attr('x2', d => (d.target as SimNode).x || 0)
-        .attr('y2', d => (d.target as SimNode).y || 0);
+      link.attr('d', d => {
+        const sx = (d.source as SimNode).x || 0;
+        const sy = (d.source as SimNode).y || 0;
+        const tx = (d.target as SimNode).x || 0;
+        const ty = (d.target as SimNode).y || 0;
+        const dx = tx - sx;
+        const dy = ty - sy;
+        const dr = Math.sqrt(dx * dx + dy * dy) * 2.2;
+        return `M${sx},${sy}A${dr},${dr} 0 0,1 ${tx},${ty}`;
+      });
 
       node.attr('transform', d => `translate(${d.x || 0},${d.y || 0})`);
 
@@ -603,7 +631,7 @@ export default function KnowledgeGraph({
       simulation.stop();
       hideNodeTooltip();
     };
-  }, [graphData]);
+  }, [graphData, viewMode]);
 
   // Tooltip helper functions
   const moveNodeTooltip = useCallback((event: { clientX: number; clientY: number }) => {
@@ -698,6 +726,83 @@ export default function KnowledgeGraph({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode]);
 
+  // Unpin all nodes and restart simulation
+  const handleUnpinAll = useCallback(() => {
+    simNodesRef.current.forEach(n => { n.fx = null; n.fy = null; });
+    if (simulationRef.current) simulationRef.current.alpha(0.5).restart();
+  }, []);
+
+  // d3.brush() — multi-select nodes in a rectangular region
+  // Brush is a separate overlay that gets toggled on/off via brushMode state.
+  useEffect(() => {
+    if (!svgRef.current || viewMode !== '2d') return;
+    const svg = d3.select(svgRef.current);
+
+    if (!brushMode) {
+      svg.select('.brush-layer').remove();
+      svg.style('cursor', null);
+      return;
+    }
+
+    // Disable zoom-drag while brush is active by temporarily filtering events
+    const zoomBehavior = zoomBehaviorRef.current;
+    if (zoomBehavior) {
+      svg.on('.zoom', null); // detach zoom while brush is active
+    }
+
+    const brushLayer = svg.append('g').attr('class', 'brush-layer');
+    const brush = d3.brush()
+      .extent([[0, 0], [containerRef.current?.clientWidth ?? 800, containerRef.current?.clientHeight ?? 600]])
+      .on('end', (event) => {
+        if (!event.selection) {
+          setBrushSelectedIds(new Set());
+          // Restore visual selection
+          nodeSelectionRef.current?.selectAll('circle:not(.activation-glow):not(.star-indicator), path')
+            .attr('stroke-width', null);
+          return;
+        }
+        const [[x0, y0], [x1, y1]] = event.selection as [[number, number], [number, number]];
+        // Get the current transform to convert screen coords → SVG coords
+        const transform = d3.zoomTransform(svgRef.current!);
+        const [sx0, sy0] = transform.invert([x0, y0]);
+        const [sx1, sy1] = transform.invert([x1, y1]);
+        const selected = new Set<string>();
+        simNodesRef.current.forEach(n => {
+          if (n.x != null && n.y != null &&
+            n.x >= sx0 && n.x <= sx1 &&
+            n.y >= sy0 && n.y <= sy1) {
+            selected.add(n.id);
+          }
+        });
+        setBrushSelectedIds(selected);
+        // Highlight selected nodes
+        nodeSelectionRef.current?.each(function (d) {
+          const isSelected = selected.has(d.id);
+          d3.select(this)
+            .selectAll('circle:not(.activation-glow):not(.star-indicator), path')
+            .attr('stroke', isSelected ? 'hsl(var(--primary))' : null)
+            .attr('stroke-width', isSelected ? 3 : null);
+          d3.select(this).style('opacity', isSelected || selected.size === 0 ? 1 : 0.3);
+        });
+      });
+
+    brushLayer.call(brush as any);
+    // Style brush selection rect
+    brushLayer.select('.selection')
+      .attr('fill', 'hsl(var(--primary) / 0.12)')
+      .attr('stroke', 'hsl(var(--primary))')
+      .attr('stroke-width', 1.5)
+      .attr('stroke-dasharray', '4 2');
+
+    return () => {
+      brushLayer.remove();
+      // Re-attach zoom
+      if (zoomBehavior && svgRef.current) {
+        d3.select(svgRef.current).call(zoomBehavior);
+      }
+    };
+  }, [brushMode, viewMode]);
+
   const handleZoomIn = () => {
     if (!svgRef.current || !zoomBehaviorRef.current) return;
     const svg = d3.select(svgRef.current);
@@ -717,6 +822,10 @@ export default function KnowledgeGraph({
   };
 
   const handleFitView = () => {
+    if (viewMode === '3d') {
+      graph3dFitRef.current?.();
+      return;
+    }
     if (!svgRef.current || !zoomBehaviorRef.current || !containerRef.current) return;
     const svg = d3.select(svgRef.current);
     // Compute bounding box of all graph content (the inner <g> group)
@@ -764,36 +873,50 @@ export default function KnowledgeGraph({
 
   return (
     <div ref={containerRef} className={cn('relative w-full h-full bg-background', className)}>
-      {/* 2D Graph View */}
-      {viewMode === '2d' && (
-        <svg
-          ref={svgRef}
-          className="w-full h-full"
-          style={{ cursor: 'grab' }}
-        />
-      )}
+      {/* SVG always stays mounted so svgRef is never null when runSimulation fires.
+          Hidden via display:none in 3D mode to avoid layout interference. */}
+      <svg
+        ref={svgRef}
+        className="absolute inset-0 w-full h-full"
+        style={{
+          cursor: brushMode ? 'crosshair' : 'grab',
+          display: viewMode === '2d' ? undefined : 'none',
+        }}
+      />
 
-      {/* 3D Graph View */}
-      {viewMode === '3d' && (
-        <Suspense fallback={
-          <div className="w-full h-full flex items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        }>
-          <Graph3D
-            nodes={graphData.nodes}
-            links={graphData.links}
-            selectedNoteId={selectedNoteId}
-            onSelectNote={onSelectNote}
-            width={containerRef.current?.clientWidth || 800}
-            height={containerRef.current?.clientHeight || 600}
-            noteContents={noteContents}
-            allTags={graphData.allTags}
-            showDomains={showDomains}
-            visibleTags={visibleTags}
-          />
-        </Suspense>
-      )}
+      {/* 3D view — fades in/out */}
+      <AnimatePresence initial={false}>
+        {viewMode === '3d' && (
+          <motion.div
+            key="view-3d"
+            className="absolute inset-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Suspense fallback={
+              <div className="w-full h-full flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            }>
+              <Graph3D
+                nodes={graphData.nodes}
+                links={graphData.links}
+                selectedNoteId={selectedNoteId}
+                onSelectNote={onSelectNote}
+                width={containerRef.current?.clientWidth || 800}
+                height={containerRef.current?.clientHeight || 600}
+                noteContents={noteContents}
+                allTags={graphData.allTags}
+                showDomains={showDomains}
+                visibleTags={visibleTags}
+                fitViewRef={graph3dFitRef}
+              />
+            </Suspense>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <GraphControls
         showDomains={showDomains}
@@ -808,6 +931,11 @@ export default function KnowledgeGraph({
         onClearFocus={handleClearFocus}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
+        onUnpinAll={handleUnpinAll}
+        hasPinnedNodes={simNodesRef.current.some(n => n.fx != null || n.fy != null)}
+        brushMode={brushMode}
+        onToggleBrushMode={() => setBrushMode(p => !p)}
+        brushSelectedCount={brushSelectedIds.size}
       />
 
       {viewMode === '2d' && (

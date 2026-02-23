@@ -1,9 +1,10 @@
 import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ZoomIn, ZoomOut, Maximize2, RefreshCw, Layers, Sparkles, X, Box, Square } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, RefreshCw, Layers, Sparkles, X, Box, Square, Pin, Lasso } from 'lucide-react';
 import type { TagInfo } from '@/hooks/useGraphData';
 
 export type ViewMode = '2d' | '3d';
@@ -21,6 +22,11 @@ interface GraphControlsProps {
   onClearFocus?: () => void;
   viewMode?: ViewMode;
   onViewModeChange?: (mode: ViewMode) => void;
+  hasPinnedNodes?: boolean;
+  onUnpinAll?: () => void;
+  brushMode?: boolean;
+  onToggleBrushMode?: () => void;
+  brushSelectedCount?: number;
 }
 
 export function GraphControls({
@@ -36,25 +42,44 @@ export function GraphControls({
   onClearFocus,
   viewMode = '2d',
   onViewModeChange,
+  hasPinnedNodes,
+  onUnpinAll,
+  brushMode,
+  onToggleBrushMode,
+  brushSelectedCount = 0,
 }: GraphControlsProps) {
   const { t } = useTranslation();
   
   return (
-    <div className="absolute bottom-4 right-4 flex flex-col gap-2">
+    <motion.div
+      className="absolute bottom-4 right-4 flex flex-col gap-2"
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+    >
       {/* Focus Mode Indicator */}
-      {hasFocus && onClearFocus && (
-        <div className="bg-primary/90 backdrop-blur-sm border border-primary rounded-lg px-3 py-2 flex items-center gap-2">
-          <span className="text-xs text-primary-foreground font-medium">{t('graph.focus_mode')}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClearFocus}
-            className="h-6 w-6 p-0 hover:bg-primary-foreground/20"
+      <AnimatePresence>
+        {hasFocus && onClearFocus && (
+          <motion.div
+            key="focus-badge"
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.85 }}
+            transition={{ duration: 0.18 }}
+            className="bg-primary/90 backdrop-blur-sm border border-primary rounded-lg px-3 py-2 flex items-center gap-2"
           >
-            <X className="h-3 w-3 text-primary-foreground" />
-          </Button>
-        </div>
-      )}
+            <span className="text-xs text-primary-foreground font-medium">{t('graph.focus_mode')}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClearFocus}
+              className="h-6 w-6 p-0 hover:bg-primary-foreground/20"
+            >
+              <X className="h-3 w-3 text-primary-foreground" />
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* View Mode Toggle */}
       {onViewModeChange && (
@@ -114,6 +139,44 @@ export function GraphControls({
         </div>
       )}
 
+      {/* Brush Multi-Select — only shown in 2D mode */}
+      {onToggleBrushMode && viewMode === '2d' && (
+        <div className="bg-card/80 backdrop-blur-sm border rounded-lg p-1">
+          <Button
+            variant={brushMode ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={onToggleBrushMode}
+            className="h-8 gap-2 justify-start w-full"
+            title={t('graph.brush_select', 'Select nodes in area')}
+          >
+            <Lasso className="h-4 w-4" />
+            <span className="text-xs">
+              {brushMode
+                ? brushSelectedCount > 0
+                  ? t('graph.brush_selected', '{{count}} selected', { count: brushSelectedCount })
+                  : t('graph.brush_active', 'Drag to select')
+                : t('graph.brush_select', 'Select Area')}
+            </span>
+          </Button>
+        </div>
+      )}
+
+      {/* Unpin All — visible when at least one node is pinned */}
+      {onUnpinAll && hasPinnedNodes && (
+        <div className="bg-card/80 backdrop-blur-sm border rounded-lg p-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onUnpinAll}
+            className="h-8 gap-2 justify-start w-full"
+            title={t('graph.unpin_all', 'Unpin all nodes')}
+          >
+            <Pin className="h-4 w-4 text-muted-foreground line-through" />
+            <span className="text-xs">{t('graph.unpin_all', 'Unpin All')}</span>
+          </Button>
+        </div>
+      )}
+
       {/* Zoom Controls */}
       <div className="bg-card/80 backdrop-blur-sm border rounded-lg p-2 flex flex-col gap-1">
         <Button
@@ -157,7 +220,7 @@ export function GraphControls({
           <span className="text-xs">{t('graph.refresh')}</span>
         </Button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
