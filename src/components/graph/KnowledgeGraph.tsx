@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState, useCallback, lazy, Suspense, useMemo } from 'react';
 import * as d3 from 'd3';
-import { useGraphData, GraphNode, GraphLink, TagInfo } from '@/hooks/useGraphData';
+import { useGraphData, GraphNode } from '@/hooks/useGraphData';
 import { useNotes } from '@/hooks/useNotes';
+import { useGraphInteractions } from '@/hooks/useGraphInteractions';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import { GraphControls, GraphLegend, GraphStats, ViewMode } from './GraphControls';
 import { expandHull, hullToPath, createPieArcs, calculateTagCenters, buildAdjacencyMap, getKHopNeighbors, calculateActivationIntensity } from './graphUtils';
-import { getWordCount, getReadingTime, getContentPreviewText } from '@/hooks/useWritingStats';
+import { generateNodePreviewHTML } from './NodePreviewTooltip';
 // Lazy load 3D component for better performance
 const Graph3D = lazy(() => import('./Graph3D'));
 
@@ -36,6 +37,7 @@ export default function KnowledgeGraph({
 
   const { data: graphData, isLoading, refetch } = useGraphData();
   const { data: notes } = useNotes();
+  const { logEdgeInteraction, logNoteAccess } = useGraphInteractions();
   const [zoom, setZoom] = useState(1);
   const [showDomains, setShowDomains] = useState(true);
   const [visibleTags, setVisibleTags] = useState<Set<string>>(new Set());
@@ -100,6 +102,8 @@ export default function KnowledgeGraph({
   const showDomainsRef = useRef(showDomains);
   const visibleTagsRef = useRef(visibleTags);
   const onSelectNoteRef = useRef(onSelectNote);
+  const logEdgeInteractionRef = useRef(logEdgeInteraction);
+  const logNoteAccessRef = useRef(logNoteAccess);
 
   // Keep refs in sync
   useEffect(() => { selectedNoteIdRef.current = selectedNoteId; }, [selectedNoteId]);
@@ -110,12 +114,17 @@ export default function KnowledgeGraph({
   useEffect(() => { showDomainsRef.current = showDomains; }, [showDomains]);
   useEffect(() => { visibleTagsRef.current = visibleTags; }, [visibleTags]);
   useEffect(() => { onSelectNoteRef.current = onSelectNote; }, [onSelectNote]);
+  useEffect(() => { logEdgeInteractionRef.current = logEdgeInteraction; }, [logEdgeInteraction]);
+  useEffect(() => { logNoteAccessRef.current = logNoteAccess; }, [logNoteAccess]);
 
   // Store adjacency map ref for dynamic activation updates
   const adjacencyMapRef = useRef<Map<string, Set<string>>>(new Map());
   // Store D3 node selection ref for dynamic updates
   const nodeSelectionRef = useRef<d3.Selection<SVGGElement, SimNode, SVGGElement, unknown> | null>(null);
+  const linkSelectionRef = useRef<d3.Selection<SVGLineElement, SimLink, SVGGElement, unknown> | null>(null);
   const simNodesRef = useRef<SimNode[]>([]);
+  // Preserve node positions across React Query refetches
+  const prevSimNodesRef = useRef<SimNode[]>([]);
 
   // Dynamic activation update (without re-running simulation)
   const updateActivationGlow = useCallback(() => {
@@ -144,6 +153,10 @@ export default function KnowledgeGraph({
       const isSelected = d.id === selId;
       const activationDistance = activationSet.get(d.id) ?? -1;
       const activationIntensity = calculateActivationIntensity(activationDistance);
+
+      // Focus mode dimming — fade nodes outside the 2-hop focus neighbourhood
+      const isFocused = !focId || focusSet.has(d.id) || d.id === focId;
+      g.style('opacity', isFocused ? 1 : 0.12);
 
       // Remove existing glow
       g.selectAll('.activation-glow').remove();
@@ -176,6 +189,17 @@ export default function KnowledgeGraph({
           .attr('stroke-width', isSelected ? 3 : 1);
       });
     });
+
+    // Apply focus mode dimming to links too
+    if (linkSelectionRef.current) {
+      linkSelectionRef.current.style('opacity', (d) => {
+        if (!focId) return null; // no focus: use default opacity
+        const srcId = typeof d.source === 'string' ? d.source : (d.source as SimNode).id;
+        const tgtId = typeof d.target === 'string' ? d.target : (d.target as SimNode).id;
+        const focused = focusSet.has(srcId) || focusSet.has(tgtId) || srcId === focId || tgtId === focId;
+        return focused ? null : '0.04';
+      });
+    }
   }, []);
 
   useEffect(() => { updateActivationGlow(); }, [hoveredNodeId, focusNodeId, selectedNoteId, activationEnabled, updateActivationGlow]);
@@ -200,10 +224,19 @@ export default function KnowledgeGraph({
     const adjacencyMap = buildAdjacencyMap(graphData.links);
     adjacencyMapRef.current = adjacencyMap;
 
-    // Create copies of data for D3 (use filtered data)
-    const simNodes: SimNode[] = graphData.nodes.map(d => ({ ...d }));
+    // Create copies of data for D3, reusing settled positions from previous render
+    // to avoid resetting the graph on React Query background refetches
+    const prevNodesMap = new Map(prevSimNodesRef.current.map(n => [n.id, n]));
+    const simNodes: SimNode[] = graphData.nodes.map(d => {
+      const prev = prevNodesMap.get(d.id);
+      if (prev && prev.x !== undefined && prev.y !== undefined) {
+        return { ...d, x: prev.x, y: prev.y, vx: 0, vy: 0 };
+      }
+      return { ...d };
+    });
     const simLinks: SimLink[] = graphData.links.map(d => ({ ...d }));
     simNodesRef.current = simNodes;
+    prevSimNodesRef.current = simNodes;
 
     // Calculate tag cluster centers
     const tagCenters = calculateTagCenters(width, height, graphData.allTags, graphData.nodes.length);
@@ -281,6 +314,9 @@ export default function KnowledgeGraph({
         return 1.0 + (strength * 2.0);
       });
 
+    // Store link selection for focus mode dimming
+    linkSelectionRef.current = link as any;
+
     // Draw nodes
     const node = g.append('g')
       .attr('class', 'nodes')
@@ -345,10 +381,25 @@ export default function KnowledgeGraph({
       .on('click', (event, d) => {
         event.stopPropagation();
         handleNodeClick(d.id);
+        // Log note access for Hebbian learning
+        logNoteAccessRef.current(d.id);
+        // Log edge traversal if clicking from an already-selected adjacent note
+        const prevSel = selectedNoteIdRef.current;
+        if (prevSel && prevSel !== d.id) {
+          const neighbors = adjacencyMapRef.current.get(d.id);
+          if (neighbors?.has(prevSel)) {
+            logEdgeInteractionRef.current(d.id, prevSel, 'traverse');
+          }
+        }
         onSelectNoteRef.current(d.id);
       })
       .on('mouseenter', function (event, d) {
         handleNodeHover(d.id);
+        // Log hover interactions with direct neighbors for Hebbian learning
+        const neighbors = adjacencyMapRef.current.get(d.id);
+        neighbors?.forEach(neighborId =>
+          logEdgeInteractionRef.current(d.id, neighborId, 'hover')
+        );
         d3.select(this).select('circle:not(.activation-glow):not(.star-indicator), path')
           .transition()
           .duration(150)
@@ -504,6 +555,7 @@ export default function KnowledgeGraph({
     };
 
     // Update positions on simulation tick
+    let tickCount = 0;
     simulation.on('tick', () => {
       link
         .attr('x1', d => (d.source as SimNode).x || 0)
@@ -513,10 +565,13 @@ export default function KnowledgeGraph({
 
       node.attr('transform', d => `translate(${d.x || 0},${d.y || 0})`);
 
-      // Only animate on first render or when toggling
+      // Throttle hull re-computation: only every 5 ticks, or immediately on domain toggle
+      tickCount++;
       const shouldAnimate = prevShowDomainsRef.current !== showDomainsRef.current;
-      renderHulls(shouldAnimate);
-      prevShowDomainsRef.current = showDomainsRef.current;
+      if (shouldAnimate || tickCount % 5 === 0) {
+        renderHulls(shouldAnimate);
+        prevShowDomainsRef.current = showDomainsRef.current;
+      }
     });
 
     // Initial zoom to fit
@@ -551,6 +606,25 @@ export default function KnowledgeGraph({
   }, [graphData]);
 
   // Tooltip helper functions
+  const moveNodeTooltip = useCallback((event: { clientX: number; clientY: number }) => {
+    if (!tooltipRef.current || !containerRef.current) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const tipW = tooltipRef.current.offsetWidth || 300;
+    const tipH = tooltipRef.current.offsetHeight || 120;
+
+    // Position to the right/below the cursor, clamped inside container bounds
+    let x = event.clientX - rect.left + 15;
+    let y = event.clientY - rect.top - 10;
+    x = Math.min(x, rect.width - tipW - 8);
+    y = Math.min(y, rect.height - tipH - 8);
+    x = Math.max(x, 8);
+    y = Math.max(y, 8);
+
+    tooltipRef.current.style.left = `${x}px`;
+    tooltipRef.current.style.top = `${y}px`;
+  }, []);
+
   const showNodeTooltip = useCallback((event: { clientX: number; clientY: number }, d: SimNode, contents: Map<string, string | null>) => {
     if (!containerRef.current) return;
 
@@ -561,44 +635,11 @@ export default function KnowledgeGraph({
       containerRef.current.appendChild(tooltipRef.current);
     }
 
-    const content = contents.get(d.id);
-    const preview = getContentPreviewText(content, 100);
-    const wordCount = getWordCount(content);
-    const readingTime = getReadingTime(wordCount);
-
-    // Escape HTML to prevent rendering issues
-    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-    const tagHtml = d.tags?.slice(0, 3).map((tag: TagInfo) =>
-      `<span style="background: ${esc(tag.color)}20; color: ${esc(tag.color)}; padding: 2px 6px; border-radius: 9999px; font-size: 10px; margin-right: 4px;">#${esc(tag.name)}</span>`
-    ).join('') || '';
-
-    tooltipRef.current.innerHTML = `
-      <div style="max-width: 280px; padding: 12px; background: hsl(var(--popover)); border: 1px solid hsl(var(--border)); border-radius: 8px; color: hsl(var(--popover-foreground)); font-family: system-ui, sans-serif; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
-        <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(d.title)}</div>
-        ${tagHtml ? `<div style="margin-bottom: 8px;">${tagHtml}</div>` : ''}
-        ${preview ? `<p style="font-size: 11px; color: hsl(var(--muted-foreground)); margin-bottom: 8px; line-height: 1.4;">${esc(preview)}</p>` : ''}
-        <div style="display: flex; gap: 12px; font-size: 10px; color: hsl(var(--muted-foreground));">
-          <span>🔗 ${d.linkCount} links</span>
-          <span>📖 ${readingTime} min read</span>
-        </div>
-      </div>
-    `;
-
+    const content = contents.get(d.id) ?? null;
+    tooltipRef.current.innerHTML = generateNodePreviewHTML(d.title, d.tags, content, d.linkCount);
     tooltipRef.current.style.opacity = '1';
     moveNodeTooltip(event);
-  }, []);
-
-  const moveNodeTooltip = useCallback((event: { clientX: number; clientY: number }) => {
-    if (!tooltipRef.current || !containerRef.current) return;
-
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left + 15;
-    const y = event.clientY - rect.top - 10;
-
-    tooltipRef.current.style.left = `${x}px`;
-    tooltipRef.current.style.top = `${y}px`;
-  }, []);
+  }, [moveNodeTooltip]);
 
   const hideNodeTooltip = useCallback(() => {
     if (tooltipRef.current) {
@@ -625,15 +666,37 @@ export default function KnowledgeGraph({
     }
   }, [showDomains, visibleTags, viewMode]);
 
-  // Handle resize
+  // Handle resize — use ResizeObserver to only rescale the SVG viewport
+  // without triggering a full simulation rebuild (preserves pan/zoom state)
   useEffect(() => {
-    const handleResize = () => {
-      runSimulation();
+    if (!containerRef.current) return;
+    let debounceTimer: ReturnType<typeof setTimeout>;
+    const observer = new ResizeObserver(() => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        if (!svgRef.current || !containerRef.current || viewMode !== '2d') return;
+        const w = containerRef.current.clientWidth;
+        const h = containerRef.current.clientHeight;
+        d3.select(svgRef.current)
+          .attr('width', w)
+          .attr('height', h);
+        // Nudge the center force to the new centre — low alpha so nodes drift, not snap
+        if (simulationRef.current) {
+          const center = simulationRef.current.force<d3.ForceCenter<SimNode>>('center');
+          if (center) {
+            center.x(w / 2).y(h / 2);
+            simulationRef.current.alpha(0.08).restart();
+          }
+        }
+      }, 200);
+    });
+    observer.observe(containerRef.current);
+    return () => {
+      clearTimeout(debounceTimer);
+      observer.disconnect();
     };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [runSimulation]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
 
   const handleZoomIn = () => {
     if (!svgRef.current || !zoomBehaviorRef.current) return;
@@ -654,13 +717,28 @@ export default function KnowledgeGraph({
   };
 
   const handleFitView = () => {
-    if (!svgRef.current || !zoomBehaviorRef.current) return;
+    if (!svgRef.current || !zoomBehaviorRef.current || !containerRef.current) return;
     const svg = d3.select(svgRef.current);
+    // Compute bounding box of all graph content (the inner <g> group)
+    const g = svg.select<SVGGElement>('g');
+    const bounds = g.node()?.getBBox();
+    if (!bounds || bounds.width === 0 || bounds.height === 0) {
+      svg.transition().duration(500).call(zoomBehaviorRef.current.transform, d3.zoomIdentity);
+      setZoom(1);
+      return;
+    }
+    const w = containerRef.current.clientWidth;
+    const h = containerRef.current.clientHeight;
+    const scale = Math.min(w / bounds.width, h / bounds.height) * 0.85;
+    const clampedScale = Math.max(0.1, Math.min(scale, 2));
+    const midX = bounds.x + bounds.width / 2;
+    const midY = bounds.y + bounds.height / 2;
+    const tx = w / 2 - clampedScale * midX;
+    const ty = h / 2 - clampedScale * midY;
     svg.transition().duration(500).call(
       zoomBehaviorRef.current.transform,
-      d3.zoomIdentity
+      d3.zoomIdentity.translate(tx, ty).scale(clampedScale)
     );
-    setZoom(1);
   };
 
   if (isLoading) {

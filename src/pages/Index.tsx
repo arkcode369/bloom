@@ -90,17 +90,32 @@ export default function Index() {
 
   // Listen for navigate-to-note events from widget windows
   useEffect(() => {
+    let active = true;
     let unlisten: (() => void) | undefined;
+
     listen<{ noteId: string }>('navigate-to-note', (event) => {
+      if (!active) return;
       const { noteId } = event.payload;
       if (noteId) {
         nav.setSelectedTagId(null);
         nav.setSelectedNoteId(noteId);
         nav.setViewMode('note');
       }
-    }).then(fn => { unlisten = fn; });
-    return () => { unlisten?.(); };
-  }, [nav]);
+    }).then(fn => {
+      if (!active) {
+        // Component already unmounted before promise resolved — immediately unlisten
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    });
+
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

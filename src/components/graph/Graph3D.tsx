@@ -1,7 +1,10 @@
-import React, { useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
+import type { ForceGraphMethods } from 'react-force-graph-3d';
 import type { GraphNode, GraphLink, TagInfo } from '@/hooks/useGraphData';
-import { getWordCount, getReadingTime, getContentPreviewText } from '@/hooks/useWritingStats';
+import { buildAdjacencyMap, getKHopNeighbors, calculateActivationIntensity } from './graphUtils';
+import { generateNodePreviewHTML } from './NodePreviewTooltip';
+import { useGraphInteractions } from '@/hooks/useGraphInteractions';
 import * as THREE from 'three';
 
 interface Graph3DProps {
@@ -29,16 +32,32 @@ export default function Graph3D({
   showDomains,
   visibleTags,
 }: Graph3DProps) {
-  const fgRef = useRef<any>();
+  const fgRef = useRef<ForceGraphMethods>();
   const domainMeshesRef = useRef<THREE.Mesh[]>([]);
   const allTagsRef = useRef(allTags);
   const showDomainsRef = useRef(showDomains);
   const visibleTagsRef = useRef(visibleTags);
 
+  // Activation spreading state
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const adjacencyMapRef = useRef<Map<string, Set<string>>>(new Map());
+
+  const { logEdgeInteraction, logNoteAccess } = useGraphInteractions();
+
   // Keep refs in sync
   useEffect(() => { allTagsRef.current = allTags; }, [allTags]);
   useEffect(() => { showDomainsRef.current = showDomains; }, [showDomains]);
   useEffect(() => { visibleTagsRef.current = visibleTags; }, [visibleTags]);
+
+  // Rebuild adjacency map whenever links change
+  useEffect(() => {
+    adjacencyMapRef.current = buildAdjacencyMap(
+      links.map(l => ({
+        source: typeof l.source === 'string' ? l.source : (l.source as any).id,
+        target: typeof l.target === 'string' ? l.target : (l.target as any).id,
+      }))
+    );
+  }, [links]);
 
   // Cleanup domain meshes on unmount
   useEffect(() => {
@@ -65,32 +84,45 @@ export default function Graph3D({
     links: links.map(link => ({ ...link })),
   }), [nodes, links]);
 
-  // Get node color based on tags
+  // Get node color with activation spreading
   const getNodeColor = useCallback((node: any) => {
-    if (node.id === selectedNoteId) {
-      return 'hsl(142, 71%, 45%)'; // Primary color for selected
-    }
-    if (node.tags && node.tags.length > 0) {
-      return node.tags[0].color;
-    }
-    return '#6b7280'; // Muted gray for no tags
-  }, [selectedNoteId]);
+    if (node.id === selectedNoteId) return 'hsl(142, 71%, 45%)';
 
-  // Handle node click
+    if (hoveredNodeId) {
+      if (node.id === hoveredNodeId) return 'hsl(142, 71%, 60%)';
+      const activationMap = getKHopNeighbors(hoveredNodeId, adjacencyMapRef.current, 2);
+      const dist = activationMap.get(node.id);
+      if (dist !== undefined) {
+        const intensity = calculateActivationIntensity(dist);
+        // Brighten activated nodes, use tag color if available
+        if (node.tags && node.tags.length > 0) return node.tags[0].color;
+        const alpha = Math.round((0.35 + intensity * 0.65) * 255).toString(16).padStart(2, '0');
+        return `#6b7280${alpha}`;
+      }
+      // Dim non-activated nodes
+      return 'rgba(107, 114, 128, 0.18)';
+    }
+
+    if (node.tags && node.tags.length > 0) return node.tags[0].color;
+    return '#6b7280';
+  }, [selectedNoteId, hoveredNodeId]);
+
+  // Handle node click — navigate + Hebbian access log
   const handleNodeClick = useCallback((node: any) => {
+    logNoteAccess(node.id);
     onSelectNote(node.id);
-    
+
     // Animate camera to focus on clicked node
     if (fgRef.current) {
       const distance = 150;
-      const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
+      const distRatio = 1 + distance / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
       fgRef.current.cameraPosition(
         { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
         node,
         1000
       );
     }
-  }, [onSelectNote]);
+  }, [onSelectNote, logNoteAccess]);
 
   // Focus on selected node when it changes
   useEffect(() => {
@@ -216,43 +248,16 @@ export default function Graph3D({
     });
   }, [getScene]);
 
-  // Re-render domains when visibility toggles change
+  // Re-render domains when visibility toggles change — wait 300 ms for positions
   useEffect(() => {
-    // Delay slightly to ensure scene is available
-    const t = setTimeout(renderDomains, 100);
+    const t = setTimeout(renderDomains, 300);
     return () => clearTimeout(t);
   }, [showDomains, visibleTags, renderDomains]);
 
-  // Fallback: also render domains after a delay when graph data changes
-  // (in case onEngineStop doesn't fire or fires too early)
-  useEffect(() => {
-    const t = setTimeout(renderDomains, 4000);
-    return () => clearTimeout(t);
-  }, [graphData, renderDomains]);
-
-  // Get node label for tooltip with content preview
+  // Get node label for tooltip — uses shared generateNodePreviewHTML with dark mode for WebGL overlay
   const getNodeLabel = useCallback((node: any) => {
-    const content = noteContents?.get(node.id);
-    const preview = getContentPreviewText(content, 100);
-    const wordCount = getWordCount(content);
-    const readingTime = getReadingTime(wordCount);
-
-    // Escape HTML to prevent rendering issues
-    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    
-    const tagHtml = node.tags?.slice(0, 3).map((tag: TagInfo) => 
-      `<span style="background: ${esc(tag.color)}20; color: ${esc(tag.color)}; padding: 2px 6px; border-radius: 9999px; font-size: 10px; margin-right: 4px;">#${esc(tag.name)}</span>`
-    ).join('') || '';
-
-    return `<div style="max-width: 280px; padding: 12px; background: rgba(0,0,0,0.9); border-radius: 8px; color: white; font-family: system-ui, sans-serif;">
-      <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(node.title)}</div>
-      ${tagHtml ? `<div style="margin-bottom: 8px;">${tagHtml}</div>` : ''}
-      ${preview ? `<p style="font-size: 11px; color: #9ca3af; margin-bottom: 8px; line-height: 1.4;">${esc(preview)}</p>` : ''}
-      <div style="display: flex; gap: 12px; font-size: 10px; color: #9ca3af;">
-        <span>🔗 ${node.linkCount} links</span>
-        <span>📖 ${readingTime} min read</span>
-      </div>
-    </div>`;
+    const content = noteContents?.get(node.id) ?? null;
+    return generateNodePreviewHTML(node.title, node.tags ?? [], content, node.linkCount, { dark: true });
   }, [noteContents]);
 
   return (
@@ -277,9 +282,18 @@ export default function Graph3D({
       d3AlphaDecay={0.02}
       d3VelocityDecay={0.3}
       cooldownTime={3000}
-      onEngineStop={() => {
-        // Render domains once physics simulation has fully settled
-        renderDomains();
+      onEngineStop={renderDomains}
+      onNodeHover={(node) => {
+        if (node) {
+          setHoveredNodeId((node as any).id);
+          // Log hover interaction with neighbors for Hebbian learning
+          const neighbors = adjacencyMapRef.current.get((node as any).id);
+          neighbors?.forEach(neighborId =>
+            logEdgeInteraction((node as any).id, neighborId, 'hover')
+          );
+        } else {
+          setHoveredNodeId(null);
+        }
       }}
     />
   );

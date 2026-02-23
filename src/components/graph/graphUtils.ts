@@ -1,6 +1,14 @@
 import * as d3 from 'd3';
 import type { TagInfo } from '@/hooks/useGraphData';
 
+// Re-export pure graph algorithms from lib/graph so consumers can import
+// from a single place without depending on a specific rendering context.
+export {
+  buildAdjacencyMap,
+  getKHopNeighbors,
+  calculateActivationIntensity,
+} from '@/lib/graph/algorithms';
+
 // Expand a convex hull by a certain padding amount
 export function expandHull(hull: [number, number][], padding: number): [number, number][] {
   if (hull.length < 3) return hull;
@@ -39,12 +47,28 @@ export function parseColor(color: string): { r: number; g: number; b: number } {
   // Handle hex colors
   if (color.startsWith('#')) {
     const hex = color.slice(1);
-    const bigint = parseInt(hex, 16);
+    // Support 3-digit shorthand (#rgb → #rrggbb)
+    const full = hex.length === 3 ? hex.split('').map(c => c + c).join('') : hex;
+    const bigint = parseInt(full, 16);
     return {
       r: (bigint >> 16) & 255,
       g: (bigint >> 8) & 255,
       b: bigint & 255,
     };
+  }
+  // Resolve hsl(), rgb(), and CSS var() by painting onto a 1×1 canvas
+  if (typeof document !== 'undefined') {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 1;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, 1, 1);
+        const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+        return { r, g, b };
+      }
+    } catch { /* fall through */ }
   }
   // Default fallback
   return { r: 139, g: 154, b: 124 };
@@ -125,63 +149,4 @@ export function calculateTagCenters(
   });
   
   return centers;
-}
-
-// Build adjacency map from links for fast neighbor lookup
-export function buildAdjacencyMap(links: { source: string; target: string }[]): Map<string, Set<string>> {
-  const adjacency = new Map<string, Set<string>>();
-  
-  links.forEach(link => {
-    const source = typeof link.source === 'string' ? link.source : (link.source as any).id;
-    const target = typeof link.target === 'string' ? link.target : (link.target as any).id;
-    
-    if (!adjacency.has(source)) adjacency.set(source, new Set());
-    if (!adjacency.has(target)) adjacency.set(target, new Set());
-    
-    adjacency.get(source)!.add(target);
-    adjacency.get(target)!.add(source);
-  });
-  
-  return adjacency;
-}
-
-// Get k-hop neighbors from a starting node
-export function getKHopNeighbors(
-  nodeId: string,
-  adjacency: Map<string, Set<string>>,
-  maxDepth: number = 2
-): Map<string, number> {
-  const result = new Map<string, number>();
-  const visited = new Set<string>();
-  const queue: { nodeId: string; depth: number }[] = [{ nodeId, depth: 0 }];
-  
-  while (queue.length > 0) {
-    const { nodeId: current, depth } = queue.shift()!;
-    
-    if (visited.has(current)) continue;
-    visited.add(current);
-    
-    if (depth > 0) {
-      result.set(current, depth);
-    }
-    
-    if (depth < maxDepth) {
-      const neighbors = adjacency.get(current) || new Set();
-      neighbors.forEach(neighbor => {
-        if (!visited.has(neighbor)) {
-          queue.push({ nodeId: neighbor, depth: depth + 1 });
-        }
-      });
-    }
-  }
-  
-  return result;
-}
-
-// Calculate activation intensity based on distance (0-1)
-export function calculateActivationIntensity(distance: number): number {
-  if (distance === 0) return 1; // Primary
-  if (distance === 1) return 0.6; // Secondary
-  if (distance === 2) return 0.3; // Tertiary
-  return 0;
 }
