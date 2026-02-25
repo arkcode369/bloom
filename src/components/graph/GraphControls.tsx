@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ZoomIn, ZoomOut, Maximize2, RefreshCw, Layers, Sparkles, X, Box, Square, Pin, Lasso } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, RefreshCw, Layers, Sparkles, X, Box, Square, Pin, Lasso, ScanSearch, ExternalLink, Tag as TagIcon } from 'lucide-react';
 import type { TagInfo } from '@/hooks/useGraphData';
 
 export type ViewMode = '2d' | '3d';
@@ -27,6 +27,11 @@ interface GraphControlsProps {
   brushMode?: boolean;
   onToggleBrushMode?: () => void;
   brushSelectedCount?: number;
+  onFocusBrushSelection?: () => void;
+  onOpenBrushNode?: () => void;
+  onClearBrush?: () => void;
+  availableTags?: TagInfo[];
+  onBulkTag?: (tagId: string) => void;
 }
 
 export function GraphControls({
@@ -47,8 +52,14 @@ export function GraphControls({
   brushMode,
   onToggleBrushMode,
   brushSelectedCount = 0,
+  onFocusBrushSelection,
+  onOpenBrushNode,
+  onClearBrush,
+  availableTags = [],
+  onBulkTag,
 }: GraphControlsProps) {
   const { t } = useTranslation();
+  const [showTagPicker, setShowTagPicker] = useState(false);
   
   return (
     <motion.div
@@ -153,11 +164,63 @@ export function GraphControls({
             <span className="text-xs">
               {brushMode
                 ? brushSelectedCount > 0
-                  ? t('graph.brush_selected', '{{count}} selected', { count: brushSelectedCount })
-                  : t('graph.brush_active', 'Drag to select')
-                : t('graph.brush_select', 'Select Area')}
+                  ? `${brushSelectedCount} selected`
+                  : 'Drag to select'
+                : 'Select Area'}
             </span>
           </Button>
+
+          {/* Actions appear once at least one node is selected */}
+          {brushSelectedCount > 0 && (
+            <div className="flex flex-col gap-0.5 mt-1 pt-1 border-t border-border/50">
+              {onFocusBrushSelection && (
+                <Button variant="ghost" size="sm" onClick={onFocusBrushSelection}
+                  className="h-7 gap-2 justify-start w-full text-xs">
+                  <ScanSearch className="h-3.5 w-3.5" />
+                  <span>Focus Selection</span>
+                </Button>
+              )}
+              {onOpenBrushNode && (
+                <Button variant="ghost" size="sm" onClick={onOpenBrushNode}
+                  className="h-7 gap-2 justify-start w-full text-xs">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>Open {brushSelectedCount > 1 ? 'All Notes' : 'Note'}</span>
+                </Button>
+              )}
+              {onBulkTag && availableTags.length > 0 && (
+                <>
+                  <Button variant="ghost" size="sm"
+                    onClick={() => setShowTagPicker(p => !p)}
+                    className="h-7 gap-2 justify-start w-full text-xs">
+                    <TagIcon className="h-3.5 w-3.5" />
+                    <span>Tag Selection</span>
+                  </Button>
+                  {showTagPicker && (
+                    <div className="flex flex-wrap gap-1 px-1 py-1 max-w-[160px]">
+                      {availableTags.map(tag => (
+                        <button
+                          key={tag.id}
+                          onClick={() => { onBulkTag(tag.id); setShowTagPicker(false); }}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-opacity hover:opacity-80"
+                          style={{ backgroundColor: tag.color, color: '#fff' }}
+                        >
+                          {tag.icon && <span>{tag.icon}</span>}
+                          {tag.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+              {onClearBrush && (
+                <Button variant="ghost" size="sm" onClick={() => { onClearBrush(); setShowTagPicker(false); }}
+                  className="h-7 gap-2 justify-start w-full text-xs text-muted-foreground">
+                  <X className="h-3.5 w-3.5" />
+                  <span>Clear</span>
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       )}
 

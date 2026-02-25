@@ -31,6 +31,7 @@ const SCHEMA_SQL = [
     user_id TEXT NOT NULL DEFAULT 'local-user',
     name TEXT NOT NULL,
     color TEXT DEFAULT '#8B9A7C',
+    icon TEXT DEFAULT NULL,
     created_at TEXT DEFAULT (datetime('now'))
   )`,
   `CREATE TABLE IF NOT EXISTS note_tags (
@@ -367,6 +368,19 @@ export async function initDatabase(): Promise<Database> {
     await db.execute('UPDATE schema_version SET version = 7');
     console.log('✅ Migration to version 7 complete');
     currentVersion = 7;
+  }
+
+  if (currentVersion < 8) {
+    console.log('🔄 Migrating database to version 8 (Tag icons)...');
+    try {
+      await db.execute('ALTER TABLE tags ADD COLUMN icon TEXT DEFAULT NULL');
+      console.log('✅ Added icon to tags');
+    } catch {
+      // Column may already exist
+    }
+    await db.execute('UPDATE schema_version SET version = 8');
+    console.log('✅ Migration to version 8 complete');
+    currentVersion = 8;
   }
 
   isInitialized = true;

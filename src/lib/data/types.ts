@@ -24,6 +24,7 @@ export interface Tag {
   user_id: string;
   name: string;
   color: string | null;
+  icon: string | null;
   created_at: string;
 }
 
@@ -212,11 +213,13 @@ export interface UpdateNoteInput {
 export interface CreateTagInput {
   name: string;
   color?: string;
+  icon?: string | null;
 }
 
 export interface UpdateTagInput {
   name?: string;
   color?: string;
+  icon?: string | null;
 }
 
 export interface ProfileUpdate {

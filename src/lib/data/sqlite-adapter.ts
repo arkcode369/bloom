@@ -90,6 +90,7 @@ function mapRowToTag(row: TagRow): Tag {
     user_id: row.user_id,
     name: row.name,
     color: row.color,
+    icon: row.icon ?? null,
     created_at: row.created_at,
   };
 }
@@ -164,6 +165,32 @@ function mapRowToDailyWritingStat(row: DailyWritingStatRow): DailyWritingStat {
 }
 
 const NOTE_COLUMNS = 'id, user_id, title, content, cover_image, is_starred, is_archived, is_pinned, created_at, updated_at';
+
+// Whether the `icon` column exists on `tags`. Probed once; shared Promise prevents race conditions.
+// If missing, the column is added immediately so icons work without a full migration re-run.
+let tagIconColPromise: Promise<boolean> | null = null;
+
+async function checkTagIconCol(db: ReturnType<typeof getDatabase>): Promise<boolean> {
+  if (tagIconColPromise !== null) return tagIconColPromise;
+  tagIconColPromise = (async () => {
+    try {
+      const cols = await (db as any).select<Array<{ name: string }>>('PRAGMA table_info(tags)');
+      const exists = Array.isArray(cols) && cols.some((c: any) => c.name === 'icon');
+      if (exists) return true;
+      // Column missing (migration ran but ALTER TABLE silently failed) — add it now
+      try {
+        await (db as any).execute('ALTER TABLE tags ADD COLUMN icon TEXT DEFAULT NULL');
+        return true;
+      } catch {
+        return false;
+      }
+    } catch {
+      
+      return false;
+    }
+  })();
+  return tagIconColPromise;
+}
 
 export function createSQLiteAdapter(): DataAdapter {
   let currentUser: User | null = { id: 'local-user', email: 'workspace@local' };
@@ -497,23 +524,27 @@ export function createSQLiteAdapter(): DataAdapter {
       async getAll(): Promise<Tag[]> {
         const userId = ensureUserId();
         const db = await ensureDb();
-
+        const hasIcon = await checkTagIconCol(db);
+        const iconCol = hasIcon ? ', icon' : '';
         const result = await db.select<TagRow[]>(
-          `SELECT id, user_id, name, color, created_at 
+          `SELECT id, user_id, name, color${iconCol}, created_at 
            FROM tags WHERE user_id = ? 
            ORDER BY name ASC`,
           [userId]
         );
-
-        return result.map(mapRowToTag);
+        return result.map(row => ({
+          ...mapRowToTag(row),
+          icon: hasIcon ? (row.icon ?? null) : null,
+        }));
       },
 
       async getAllWithCounts(): Promise<TagWithCount[]> {
         const userId = ensureUserId();
         const db = await ensureDb();
-
+        const hasIcon = await checkTagIconCol(db);
+        const iconCol = hasIcon ? ', t.icon' : '';
         const result = await db.select<TagWithCountRow[]>(
-          `SELECT t.id, t.user_id, t.name, t.color, t.created_at, 
+          `SELECT t.id, t.user_id, t.name, t.color${iconCol}, t.created_at, 
                   COUNT(n.id) as note_count
            FROM tags t
            LEFT JOIN note_tags nt ON t.id = nt.tag_id
@@ -523,9 +554,9 @@ export function createSQLiteAdapter(): DataAdapter {
            ORDER BY t.name ASC`,
           [userId]
         );
-
         return result.map(row => ({
           ...mapRowToTag(row),
+          icon: hasIcon ? (row.icon ?? null) : null,
           noteCount: row.note_count,
         }));
       },
@@ -533,26 +564,36 @@ export function createSQLiteAdapter(): DataAdapter {
       async create(input: CreateTagInput): Promise<Tag> {
         const userId = ensureUserId();
         const db = await ensureDb();
+        const hasIcon = await checkTagIconCol(db);
 
         const id = generateUUID();
         const now = getCurrentTimestamp();
 
-        await db.execute(
-          'INSERT INTO tags (id, user_id, name, color, created_at) VALUES (?, ?, ?, ?, ?)',
-          [id, userId, input.name, input.color || DEFAULT_TAG_COLOR, now]
-        );
+        if (hasIcon) {
+          await db.execute(
+            'INSERT INTO tags (id, user_id, name, color, icon, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+            [id, userId, input.name, input.color || DEFAULT_TAG_COLOR, input.icon ?? null, now]
+          );
+        } else {
+          await db.execute(
+            'INSERT INTO tags (id, user_id, name, color, created_at) VALUES (?, ?, ?, ?, ?)',
+            [id, userId, input.name, input.color || DEFAULT_TAG_COLOR, now]
+          );
+        }
 
         return {
           id,
           user_id: userId,
           name: input.name,
           color: input.color || DEFAULT_TAG_COLOR,
+          icon: hasIcon ? (input.icon ?? null) : null,
           created_at: now,
         };
       },
 
       async update(id: string, input: UpdateTagInput): Promise<Tag> {
         const db = await ensureDb();
+        const hasIcon = await checkTagIconCol(db);
 
         const updates: string[] = [];
         const values: (string | number)[] = [];
@@ -565,6 +606,11 @@ export function createSQLiteAdapter(): DataAdapter {
           updates.push('color = ?');
           values.push(input.color);
         }
+        // Only SET icon if the column actually exists in this DB
+        if (hasIcon && input.icon !== undefined) {
+          updates.push('icon = ?');
+          values.push(input.icon as string);
+        }
 
         if (updates.length > 0) {
           values.push(id);
@@ -574,16 +620,14 @@ export function createSQLiteAdapter(): DataAdapter {
           );
         }
 
+        // Fetch back updated row
+        const iconCol = hasIcon ? ', icon' : '';
         const result = await db.select<TagRow[]>(
-          'SELECT id, user_id, name, color, created_at FROM tags WHERE id = ?',
+          `SELECT id, user_id, name, color${iconCol}, created_at FROM tags WHERE id = ?`,
           [id]
         );
-
-        if (result.length === 0) {
-          throw new Error('Tag not found');
-        }
-
-        return mapRowToTag(result[0]);
+        if (result.length === 0) throw new Error('Tag not found');
+        return { ...mapRowToTag(result[0]), icon: hasIcon ? (result[0].icon ?? null) : null };
       },
 
       async delete(id: string): Promise<void> {
@@ -596,16 +640,7 @@ export function createSQLiteAdapter(): DataAdapter {
       async getByNoteId(noteId: string): Promise<NoteTagWithTag[]> {
         const db = await ensureDb();
 
-        const result = await db.select<NoteTagJoinRow[]>(
-          `SELECT nt.id, nt.note_id, nt.tag_id, nt.created_at,
-                  t.id as t_id, t.user_id as t_user_id, t.name, t.color, t.created_at as t_created_at
-           FROM note_tags nt
-           JOIN tags t ON nt.tag_id = t.id
-           WHERE nt.note_id = ?`,
-          [noteId]
-        );
-
-        return result.map(row => ({
+        const mapResult = (rows: NoteTagJoinRow[], hasIcon: boolean) => rows.map(row => ({
           id: row.id,
           note_id: row.note_id,
           tag_id: row.tag_id,
@@ -615,9 +650,23 @@ export function createSQLiteAdapter(): DataAdapter {
             user_id: row.t_user_id || 'local-user',
             name: row.name,
             color: row.color,
+            icon: hasIcon ? (row.icon ?? null) : null,
             created_at: row.t_created_at || '',
           },
         }));
+
+        const db2 = await ensureDb();
+        const hasIcon = await checkTagIconCol(db2);
+        const iconCol = hasIcon ? ', t.icon' : '';
+        const result = await db2.select<NoteTagJoinRow[]>(
+          `SELECT nt.id, nt.note_id, nt.tag_id, nt.created_at,
+                  t.id as t_id, t.user_id as t_user_id, t.name, t.color${iconCol}, t.created_at as t_created_at
+           FROM note_tags nt
+           JOIN tags t ON nt.tag_id = t.id
+           WHERE nt.note_id = ?`,
+          [noteId]
+        );
+        return mapResult(result, hasIcon);
       },
 
       async getNotesByTagId(tagId: string): Promise<Note[]> {

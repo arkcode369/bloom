@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useTagsWithCounts, useUpdateTag, useDeleteTag, useCreateTag, TAG_COLORS } from '@/hooks/useTags';
+import { useTagsWithCounts, useUpdateTag, useDeleteTag, useCreateTag, TAG_COLORS, TAG_ICONS } from '@/hooks/useTags';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -46,15 +46,18 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState('');
+  const [editIcon, setEditIcon] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState(TAG_COLORS[0]);
+  const [newIcon, setNewIcon] = useState<string | null>(null);
 
-  const handleStartEdit = (tag: { id: string; name: string; color: string | null }) => {
+  const handleStartEdit = (tag: { id: string; name: string; color: string | null; icon?: string | null }) => {
     setEditingId(tag.id);
     setEditName(tag.name);
     setEditColor(tag.color || TAG_COLORS[0]);
+    setEditIcon(tag.icon ?? null);
   };
 
   const handleSaveEdit = async () => {
@@ -64,6 +67,7 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
       id: editingId,
       name: editName.trim(),
       color: editColor,
+      icon: editIcon,
     });
     setEditingId(null);
   };
@@ -72,6 +76,7 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
     setEditingId(null);
     setEditName('');
     setEditColor('');
+    setEditIcon(null);
   };
 
   const handleDeleteConfirm = async () => {
@@ -90,9 +95,11 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
     await createTag.mutateAsync({
       name: newName.trim(),
       color: newColor,
+      icon: newIcon,
     });
     setNewName('');
     setNewColor(TAG_COLORS[0]);
+    setNewIcon(null);
     setShowCreate(false);
   };
 
@@ -117,6 +124,7 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
                   <div key={tag.id} className="group">
                     {editingId === tag.id ? (
                       <div className="flex items-center gap-1 px-2 py-1">
+                        {/* Color picker popover — edit */}
                         <Popover>
                           <PopoverTrigger asChild>
                             <button
@@ -125,7 +133,7 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
                             />
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-2" align="start">
-                            <div className="flex flex-wrap gap-1.5 max-w-[160px]">
+                            <div className="flex flex-wrap gap-1.5 max-w-[164px]">
                               {TAG_COLORS.map(color => (
                                 <button
                                   key={color}
@@ -136,6 +144,38 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
                                   )}
                                   style={{ backgroundColor: color }}
                                 />
+                              ))}
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-border/40">
+                              <span className="text-xs text-muted-foreground">Custom</span>
+                              <input
+                                type="color"
+                                value={editColor}
+                                onChange={e => setEditColor(e.target.value)}
+                                className="h-6 w-8 cursor-pointer rounded border-0 p-0 bg-transparent"
+                              />
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                        {/* Icon picker popover */}
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button className="h-6 w-6 rounded border border-border/50 text-sm flex items-center justify-center hover:bg-accent">
+                              {editIcon || '🏷️'}
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-2" align="start">
+                            <div className="flex flex-wrap gap-1 max-w-[200px]">
+                              <button
+                                onClick={() => setEditIcon(null)}
+                                className={cn('h-7 w-7 rounded text-xs border hover:bg-accent', !editIcon && 'bg-accent border-primary')}
+                              >✕</button>
+                              {TAG_ICONS.map(icon => (
+                                <button
+                                  key={icon}
+                                  onClick={() => setEditIcon(icon)}
+                                  className={cn('h-7 w-7 rounded text-base hover:bg-accent border', editIcon === icon && 'bg-accent border-primary')}
+                                >{icon}</button>
                               ))}
                             </div>
                           </PopoverContent>
@@ -180,10 +220,14 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
                         )}
                         onClick={() => onSelectTag(tag.id)}
                       >
-                        <span
-                          className="h-3 w-3 rounded-full shrink-0"
-                          style={{ backgroundColor: tag.color || '#8B9A7C' }}
-                        />
+                        {tag.icon ? (
+                          <span className="text-sm leading-none shrink-0">{tag.icon}</span>
+                        ) : (
+                          <span
+                            className="h-3 w-3 rounded-full shrink-0"
+                            style={{ backgroundColor: tag.color || '#8B9A7C' }}
+                          />
+                        )}
                         <span className="font-body text-sm truncate flex-1">{tag.name}</span>
                         <span className="font-body text-xs text-muted-foreground transition-all duration-300 ease-in-out group-hover:translate-x-[-48px]">
                           {tag.noteCount}
@@ -223,6 +267,7 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
           {/* Create new tag */}
           {showCreate ? (
             <div className="flex items-center gap-1 px-2 py-1 border-t mt-2 pt-2">
+              {/* Color picker popover — create */}
               <Popover>
                 <PopoverTrigger asChild>
                   <button
@@ -231,7 +276,7 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
                   />
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-2" align="start">
-                  <div className="flex flex-wrap gap-1.5 max-w-[160px]">
+                  <div className="flex flex-wrap gap-1.5 max-w-[164px]">
                     {TAG_COLORS.map(color => (
                       <button
                         key={color}
@@ -242,6 +287,38 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
                         )}
                         style={{ backgroundColor: color }}
                       />
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-border/40">
+                    <span className="text-xs text-muted-foreground">Custom</span>
+                    <input
+                      type="color"
+                      value={newColor}
+                      onChange={e => setNewColor(e.target.value)}
+                      className="h-6 w-8 cursor-pointer rounded border-0 p-0 bg-transparent"
+                    />
+                  </div>
+                </PopoverContent>
+              </Popover>
+              {/* Icon picker popover */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="h-6 w-6 rounded border border-border/50 text-sm flex items-center justify-center hover:bg-accent">
+                    {newIcon || '🏷️'}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-2" align="start">
+                  <div className="flex flex-wrap gap-1 max-w-[200px]">
+                    <button
+                      onClick={() => setNewIcon(null)}
+                      className={cn('h-7 w-7 rounded text-xs border hover:bg-accent', !newIcon && 'bg-accent border-primary')}
+                    >✕</button>
+                    {TAG_ICONS.map(icon => (
+                      <button
+                        key={icon}
+                        onClick={() => setNewIcon(icon)}
+                        className={cn('h-7 w-7 rounded text-base hover:bg-accent border', newIcon === icon && 'bg-accent border-primary')}
+                      >{icon}</button>
                     ))}
                   </div>
                 </PopoverContent>

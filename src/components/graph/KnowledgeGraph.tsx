@@ -4,8 +4,10 @@ import * as d3 from 'd3';
 import { useGraphData, GraphNode } from '@/hooks/useGraphData';
 import { useNotes } from '@/hooks/useNotes';
 import { useGraphInteractions } from '@/hooks/useGraphInteractions';
+import { useTags, useAddTagToNote } from '@/hooks/useTags';
 import { cn } from '@/lib/utils';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Search, X, ScanSearch, ExternalLink } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { GraphControls, GraphLegend, GraphStats, ViewMode } from './GraphControls';
 import { expandHull, hullToPath, createPieArcs, calculateTagCenters, buildAdjacencyMap, getKHopNeighbors, calculateActivationIntensity } from './graphUtils';
 import { generateNodePreviewHTML } from './NodePreviewTooltip';
@@ -38,7 +40,9 @@ export default function KnowledgeGraph({
 
   const { data: graphData, isLoading, refetch } = useGraphData();
   const { data: notes } = useNotes();
+  const { data: allTags } = useTags();
   const { logEdgeInteraction, logNoteAccess } = useGraphInteractions();
+  const addTagToNote = useAddTagToNote();
   const [zoom, setZoom] = useState(1);
   const [showDomains, setShowDomains] = useState(true);
   const [visibleTags, setVisibleTags] = useState<Set<string>>(new Set());
@@ -50,6 +54,9 @@ export default function KnowledgeGraph({
   const [brushSelectedIds, setBrushSelectedIds] = useState<Set<string>>(new Set());
   const brushModeRef = useRef(false);
   useEffect(() => { brushModeRef.current = brushMode; }, [brushMode]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResultIndex, setSearchResultIndex] = useState(0);
+  const [focusGroupIds, setFocusGroupIds] = useState<Set<string>>(new Set());
 
   // Ref to call zoomToFit on the 3D graph imperatively
   const graph3dFitRef = useRef<(() => void) | null>(null);
@@ -99,6 +106,7 @@ export default function KnowledgeGraph({
 
   const handleClearFocus = useCallback(() => {
     setFocusNodeId(null);
+    setFocusGroupIds(new Set());
   }, []);
 
   // Use refs for values that should NOT trigger simulation restart
@@ -124,6 +132,10 @@ export default function KnowledgeGraph({
   useEffect(() => { onSelectNoteRef.current = onSelectNote; }, [onSelectNote]);
   useEffect(() => { logEdgeInteractionRef.current = logEdgeInteraction; }, [logEdgeInteraction]);
   useEffect(() => { logNoteAccessRef.current = logNoteAccess; }, [logNoteAccess]);
+  const focusGroupIdsRef = useRef<Set<string>>(new Set());
+  const searchQueryRef = useRef('');
+  useEffect(() => { focusGroupIdsRef.current = focusGroupIds; }, [focusGroupIds]);
+  useEffect(() => { searchQueryRef.current = searchQuery; }, [searchQuery]);
 
   // Store adjacency map ref for dynamic activation updates
   const adjacencyMapRef = useRef<Map<string, Set<string>>>(new Map());
@@ -139,16 +151,24 @@ export default function KnowledgeGraph({
     const nodeSelection = nodeSelectionRef.current;
     if (!nodeSelection) return;
 
+    // Search takes visual priority — let updateSearchHighlight handle opacity
+    if (searchQueryRef.current.trim()) return;
+
     const adjacencyMap = adjacencyMapRef.current;
     const hovId = hoveredNodeIdRef.current;
     const actEnabled = activationEnabledRef.current;
     const focId = focusNodeIdRef.current;
     const selId = selectedNoteIdRef.current;
+    const groupFocusIds = focusGroupIdsRef.current;
+    const hasGroupFocus = groupFocusIds.size > 0;
 
-    const activationSet = actEnabled && hovId
-      ? getKHopNeighbors(hovId, adjacencyMap, 2)
+    // Activation source: hovered node takes priority, fall back to focused node.
+    // This makes the toggle visibly meaningful even without hovering.
+    const activationSource = hovId ?? (actEnabled && focId ? focId : null);
+    const activationSet = actEnabled && activationSource
+      ? getKHopNeighbors(activationSource, adjacencyMap, 2)
       : new Map<string, number>();
-    if (hovId && actEnabled) activationSet.set(hovId, 0);
+    if (activationSource && actEnabled) activationSet.set(activationSource, 0);
 
     const focusSet = focId
       ? getKHopNeighbors(focId, adjacencyMap, 2)
@@ -162,27 +182,59 @@ export default function KnowledgeGraph({
       const activationDistance = activationSet.get(d.id) ?? -1;
       const activationIntensity = calculateActivationIntensity(activationDistance);
 
-      // Focus mode dimming — fade nodes outside the 2-hop focus neighbourhood
-      const isFocused = !focId || focusSet.has(d.id) || d.id === focId;
+      // Focus mode dimming — group focus (brush selection) takes priority over single-node focus
+      const isFocused = hasGroupFocus
+        ? groupFocusIds.has(d.id)
+        : (!focId || focusSet.has(d.id) || d.id === focId);
       g.style('opacity', isFocused ? 1 : 0.12);
 
       // Remove existing glow
       g.selectAll('.activation-glow').remove();
 
-      // Add glow effect for activated nodes
+      // ── Multi-ring activation glow ─────────────────────────────────
       if (activationIntensity > 0) {
-        const glowColor = activationIntensity === 1 ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))';
-        const glowRadius = radius + (activationIntensity * 8);
-        const glowOpacity = 0.3 * activationIntensity;
+        const nodeColor = d.tags[0]?.color || 'hsl(var(--primary))';
+        const isSrc    = activationDistance === 0;  // the activated source node
+        const isDirect = activationDistance === 1;  // 1st-hop neighbor
+        // 2nd-hop: activationDistance === 2 (activationIntensity === 0.3)
 
-        g.insert('circle', ':first-child')
-          .attr('r', glowRadius)
-          .attr('fill', glowColor)
-          .attr('opacity', 0)
-          .attr('class', 'activation-glow')
-          .transition()
-          .duration(200)
-          .attr('opacity', glowOpacity);
+        if (isSrc) {
+          // 3 concentric pulsing rings for the source node
+          g.insert('circle', ':first-child')
+            .attr('class', 'activation-glow ag-src-outer')
+            .attr('r', radius + 26)
+            .attr('fill', nodeColor)
+            .attr('filter', 'url(#ag-lg)');
+          g.insert('circle', ':first-child')
+            .attr('class', 'activation-glow ag-src-mid')
+            .attr('r', radius + 13)
+            .attr('fill', nodeColor)
+            .attr('filter', 'url(#ag-sm)');
+          g.insert('circle', ':first-child')
+            .attr('class', 'activation-glow ag-src-inner')
+            .attr('r', radius + 5)
+            .attr('fill', 'white')
+            .attr('filter', 'url(#ag-sm)');
+        } else if (isDirect) {
+          // 2 rings for direct neighbors
+          g.insert('circle', ':first-child')
+            .attr('class', 'activation-glow ag-n1-outer')
+            .attr('r', radius + 18)
+            .attr('fill', nodeColor)
+            .attr('filter', 'url(#ag-lg)');
+          g.insert('circle', ':first-child')
+            .attr('class', 'activation-glow ag-n1-inner')
+            .attr('r', radius + 7)
+            .attr('fill', nodeColor)
+            .attr('filter', 'url(#ag-sm)');
+        } else {
+          // Single soft ring for 2-hop nodes
+          g.insert('circle', ':first-child')
+            .attr('class', 'activation-glow ag-n2')
+            .attr('r', radius + 9)
+            .attr('fill', nodeColor)
+            .attr('filter', 'url(#ag-sm)');
+        }
       }
 
       // Update selected stroke
@@ -201,16 +253,79 @@ export default function KnowledgeGraph({
     // Apply focus mode dimming to links too
     if (linkSelectionRef.current) {
       linkSelectionRef.current.style('opacity', (d) => {
-        if (!focId) return null; // no focus: use default opacity
         const srcId = typeof d.source === 'string' ? d.source : (d.source as SimNode).id;
         const tgtId = typeof d.target === 'string' ? d.target : (d.target as SimNode).id;
+        if (hasGroupFocus) {
+          return (groupFocusIds.has(srcId) || groupFocusIds.has(tgtId)) ? null : '0.04';
+        }
+        if (!focId) return null;
         const focused = focusSet.has(srcId) || focusSet.has(tgtId) || srcId === focId || tgtId === focId;
         return focused ? null : '0.04';
       });
     }
   }, []);
 
-  useEffect(() => { updateActivationGlow(); }, [hoveredNodeId, focusNodeId, selectedNoteId, activationEnabled, updateActivationGlow]);
+  useEffect(() => { updateActivationGlow(); }, [hoveredNodeId, focusNodeId, focusGroupIds, selectedNoteId, activationEnabled, updateActivationGlow]);
+
+  // Compute matching node IDs from the current search query
+  const searchResultIds = useMemo(() => {
+    if (!searchQuery.trim() || !graphData) return [];
+    const q = searchQuery.trim().toLowerCase();
+    return graphData.nodes.filter(n => n.title.toLowerCase().includes(q)).map(n => n.id);
+  }, [searchQuery, graphData]);
+
+  // Highlight search matches: ring on matches, dim everything else
+  const updateSearchHighlight = useCallback(() => {
+    const nodeSelection = nodeSelectionRef.current;
+    if (!nodeSelection) return;
+    const query = searchQueryRef.current.trim().toLowerCase();
+    nodeSelection.each(function (d) {
+      const g = d3.select(this);
+      g.selectAll('.search-ring').remove();
+      if (!query) { g.style('opacity', null); return; }
+      const matches = d.title.toLowerCase().includes(query);
+      g.style('opacity', matches ? 1 : 0.08);
+      if (matches) {
+        const radius = 8 + Math.min(d.linkCount * 2, 12);
+        g.insert('circle', ':first-child')
+          .attr('class', 'search-ring')
+          .attr('r', radius + 6)
+          .attr('fill', 'none')
+          .attr('stroke', 'hsl(var(--primary))')
+          .attr('stroke-width', 2.5)
+          .attr('stroke-dasharray', '4 2');
+      }
+    });
+    if (linkSelectionRef.current) {
+      linkSelectionRef.current.style('opacity', (d) => {
+        if (!query) return null;
+        const srcId = typeof d.source === 'string' ? d.source : (d.source as SimNode).id;
+        const tgtId = typeof d.target === 'string' ? d.target : (d.target as SimNode).id;
+        const nodes = simNodesRef.current;
+        const sm = nodes.find(n => n.id === srcId)?.title.toLowerCase().includes(query) ?? false;
+        const tm = nodes.find(n => n.id === tgtId)?.title.toLowerCase().includes(query) ?? false;
+        return (sm || tm) ? null : '0.04';
+      });
+    }
+  }, []);
+
+  useEffect(() => { updateSearchHighlight(); }, [searchResultIds, updateSearchHighlight]);
+  // Restore activation glow when search is cleared
+  useEffect(() => { if (!searchQuery.trim()) updateActivationGlow(); }, [searchQuery, updateActivationGlow]);
+
+  // Smooth pan + zoom to a node in 2D
+  const flyToNode2D = useCallback((nodeId: string) => {
+    const node = simNodesRef.current.find(n => n.id === nodeId);
+    if (!node || node.x == null || node.y == null) return;
+    if (!svgRef.current || !zoomBehaviorRef.current || !containerRef.current) return;
+    const w = containerRef.current.clientWidth;
+    const h = containerRef.current.clientHeight;
+    const scale = 1.8;
+    d3.select(svgRef.current)
+      .transition().duration(600)
+      .call(zoomBehaviorRef.current.transform,
+        d3.zoomIdentity.translate(w / 2 - scale * node.x, h / 2 - scale * node.y).scale(scale));
+  }, []);
 
   const runSimulation = useCallback(() => {
     if (!svgRef.current || !containerRef.current || !graphData) return;
@@ -222,6 +337,24 @@ export default function KnowledgeGraph({
 
     // Clear previous content
     svg.selectAll('*').remove();
+
+    // ── SVG glow filter defs (used by activation-glow rings) ──────────
+    const defs = svg.append('defs');
+    // Small blur (tight inner glow)
+    defs.append('filter')
+      .attr('id', 'ag-sm')
+      .attr('x', '-120%').attr('y', '-120%')
+      .attr('width', '340%').attr('height', '340%')
+      .append('feGaussianBlur')
+      .attr('stdDeviation', '5');
+    // Large blur (diffuse outer halo)
+    defs.append('filter')
+      .attr('id', 'ag-lg')
+      .attr('x', '-200%').attr('y', '-200%')
+      .attr('width', '500%').attr('height', '500%')
+      .append('feGaussianBlur')
+      .attr('stdDeviation', '12');
+    // ──────────────────────────────────────────────────────────────────
 
     if (graphData.nodes.length === 0) {
       setZoom(1);
@@ -803,6 +936,79 @@ export default function KnowledgeGraph({
     };
   }, [brushMode, viewMode]);
 
+  // Focus the brush-selected nodes as a group (dims everything outside)
+  const handleFocusBrushSelection = useCallback(() => {
+    if (brushSelectedIds.size === 0) return;
+    setFocusGroupIds(new Set(brushSelectedIds));
+    setBrushSelectedIds(new Set());
+    setBrushMode(false);
+    nodeSelectionRef.current?.each(function () {
+      d3.select(this).style('opacity', null)
+        .selectAll('circle:not(.activation-glow):not(.star-indicator), path')
+        .attr('stroke', null).attr('stroke-width', null);
+    });
+    linkSelectionRef.current?.style('opacity', null);
+  }, [brushSelectedIds]);
+
+  // Open the first note in the brush selection
+  // In Tauri: opens ALL selected nodes as pop-out windows.
+  // Falls back to selecting the first node when running in browser.
+  const handleOpenBrushNode = useCallback(async () => {
+    if (brushSelectedIds.size === 0) return;
+    const ids = [...brushSelectedIds];
+    // Select the first note in the main panel regardless
+    const firstId = ids[0];
+    onSelectNoteRef.current(firstId);
+    flyToNode2D(firstId);
+    // Try to open each selected note as a Tauri pop-out window
+    try {
+      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+      await Promise.all(ids.map(async (id, i) => {
+        const label = `note-popup-${id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+        const existing = await WebviewWindow.getByLabel(label);
+        if (existing) {
+          await existing.show();
+          await existing.setFocus();
+          return;
+        }
+        // Stagger windows slightly so they don't all stack
+        const offset = i * 24;
+        new WebviewWindow(label, {
+          url: `/note/${id}`,
+          title: 'Note',
+          width: 800,
+          height: 600,
+          x: 100 + offset,
+          y: 80 + offset,
+          resizable: true,
+          decorations: true,
+        });
+      }));
+    } catch {
+      // Not in Tauri — single-note fallback already handled above
+    }
+  }, [brushSelectedIds, flyToNode2D]);
+
+  // Clear brush selection and restore visual state
+  const handleClearBrush = useCallback(() => {
+    setBrushSelectedIds(new Set());
+    setBrushMode(false);
+    nodeSelectionRef.current?.each(function () {
+      d3.select(this).style('opacity', null)
+        .selectAll('circle:not(.activation-glow):not(.star-indicator), path')
+        .attr('stroke', null).attr('stroke-width', null);
+    });
+    linkSelectionRef.current?.style('opacity', null);
+    setTimeout(updateActivationGlow, 30);
+  }, [updateActivationGlow]);
+
+  // Bulk-tag all brush-selected notes with the given tag
+  const handleBulkTag = useCallback(async (tagId: string) => {
+    const ids = [...brushSelectedIds];
+    if (ids.length === 0) return;
+    await Promise.all(ids.map(id => addTagToNote.mutateAsync({ noteId: id, tagId })));
+  }, [brushSelectedIds, addTagToNote]);
+
   const handleZoomIn = () => {
     if (!svgRef.current || !zoomBehaviorRef.current) return;
     const svg = d3.select(svgRef.current);
@@ -873,6 +1079,54 @@ export default function KnowledgeGraph({
 
   return (
     <div ref={containerRef} className={cn('relative w-full h-full bg-background', className)}>
+      {/* Graph Search Bar — 2D only */}
+      {viewMode === '2d' && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-64">
+          <div className="relative flex items-center">
+            <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none z-10" />
+            <Input
+              className="pl-8 pr-20 h-8 text-xs bg-card/90 backdrop-blur-sm shadow-sm"
+              placeholder="Search notes…"
+              value={searchQuery}
+              onChange={e => { setSearchQuery(e.target.value); setSearchResultIndex(0); }}
+              onKeyDown={e => {
+                if (e.key === 'Escape') {
+                  setSearchQuery('');
+                } else if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  const next = searchResultIds.length === 0 ? 0 : (searchResultIndex + 1) % searchResultIds.length;
+                  setSearchResultIndex(next);
+                  if (searchResultIds[next]) flyToNode2D(searchResultIds[next]);
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  const prev = searchResultIds.length === 0 ? 0 : (searchResultIndex - 1 + searchResultIds.length) % searchResultIds.length;
+                  setSearchResultIndex(prev);
+                  if (searchResultIds[prev]) flyToNode2D(searchResultIds[prev]);
+                }
+              }}
+            />
+            {searchQuery && (
+              <div className="absolute right-2 flex items-center gap-1.5">
+                {searchResultIds.length > 0 && (
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {Math.min(searchResultIndex + 1, searchResultIds.length)}/{searchResultIds.length}
+                  </span>
+                )}
+                {searchQuery && searchResultIds.length === 0 && (
+                  <span className="text-xs text-muted-foreground">0</span>
+                )}
+                <button
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setSearchQuery('')}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* SVG always stays mounted so svgRef is never null when runSimulation fires.
           Hidden via display:none in 3D mode to avoid layout interference. */}
       <svg
@@ -912,6 +1166,8 @@ export default function KnowledgeGraph({
                 showDomains={showDomains}
                 visibleTags={visibleTags}
                 fitViewRef={graph3dFitRef}
+                activationEnabled={activationEnabled}
+                focusNodeId={focusNodeId}
               />
             </Suspense>
           </motion.div>
@@ -927,7 +1183,7 @@ export default function KnowledgeGraph({
         onRefresh={() => refetch()}
         activationEnabled={activationEnabled}
         onActivationChange={setActivationEnabled}
-        hasFocus={!!focusNodeId}
+        hasFocus={!!focusNodeId || focusGroupIds.size > 0}
         onClearFocus={handleClearFocus}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
@@ -936,6 +1192,11 @@ export default function KnowledgeGraph({
         brushMode={brushMode}
         onToggleBrushMode={() => setBrushMode(p => !p)}
         brushSelectedCount={brushSelectedIds.size}
+        onFocusBrushSelection={handleFocusBrushSelection}
+        onOpenBrushNode={handleOpenBrushNode}
+        onClearBrush={handleClearBrush}
+        availableTags={allTags ?? []}
+        onBulkTag={handleBulkTag}
       />
 
       {viewMode === '2d' && (

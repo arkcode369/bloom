@@ -10,18 +10,33 @@ import type { Tag, NoteTag, TagWithCount, NoteTagWithTag, Note } from '@/lib/dat
 // Re-export types for backwards compatibility
 export type { Tag, NoteTag, TagWithCount };
 
-// Tag color palette
+// Tag color palette — 16 soft / muted tones
 export const TAG_COLORS = [
-  '#8B9A7C', // Sage green (default)
-  '#B8A9C9', // Lavender
-  '#E8B4B8', // Soft coral
+  '#8B9A7C', // Sage
+  '#B4A7D6', // Lavender
+  '#E8B4B8', // Coral
   '#A8D5BA', // Mint
   '#F5D89A', // Honey
-  '#9FC5E8', // Sky blue
-  '#E6B8AF', // Blush
-  '#C9DAF8', // Periwinkle
+  '#9FC5E8', // Sky
   '#D5A6BD', // Mauve
-  '#B4A7D6', // Purple mist
+  '#F9C68A', // Peach
+  '#A8C4E0', // Ice blue
+  '#C3D9A2', // Lime
+  '#E6C8A0', // Sand
+  '#C5B8E8', // Wisteria
+  '#F4B8B8', // Blush
+  '#B0D4C8', // Teal mist
+  '#E8D4A8', // Cream
+  '#8BBFD4', // Steel blue
+];
+
+// Emoji icon set for tags
+export const TAG_ICONS = [
+  '📌', '📎', '🏷️', '🔖', '⭐', '✨', '💡', '🎯',
+  '📚', '📝', '🎨', '🎵', '🏋️', '💼', '🔬', '🌿',
+  '🏠', '🚀', '💎', '🔥', '❤️', '🌊', '🌙', '☀️',
+  '🍀', '🎸', '🎭', '🏆', '🌍', '💻', '🛠️', '✏️',
+  '🐉', '🦋', '🌸', '🧠', '⚡', '🎪', '🔮', '🌈',
 ];
 
 export function useTags() {
@@ -77,8 +92,8 @@ export function useCreateTag() {
   const adapter = useDataAdapter();
 
   return useMutation({
-    mutationFn: async ({ name, color }: { name: string; color?: string }) => {
-      return adapter.tags.create({ name, color: color || TAG_COLORS[0] });
+    mutationFn: async ({ name, color, icon }: { name: string; color?: string; icon?: string | null }) => {
+      return adapter.tags.create({ name, color: color || TAG_COLORS[0], icon });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tags'] });
@@ -95,8 +110,8 @@ export function useUpdateTag() {
   const adapter = useDataAdapter();
 
   return useMutation({
-    mutationFn: async ({ id, name, color }: { id: string; name?: string; color?: string }) => {
-      return adapter.tags.update(id, { name, color });
+    mutationFn: async ({ id, name, color, icon }: { id: string; name?: string; color?: string; icon?: string | null }) => {
+      return adapter.tags.update(id, { name, color, icon });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tags'] });

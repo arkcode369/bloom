@@ -20,6 +20,8 @@ interface Graph3DProps {
   showDomains?: boolean;
   visibleTags?: Set<string>;
   fitViewRef?: React.MutableRefObject<(() => void) | null>;
+  activationEnabled?: boolean;
+  focusNodeId?: string | null;
 }
 
 export default function Graph3D({
@@ -34,6 +36,8 @@ export default function Graph3D({
   showDomains,
   visibleTags,
   fitViewRef,
+  activationEnabled = true,
+  focusNodeId,
 }: Graph3DProps) {
   const fgRef = useRef<ForceGraphMethods>();
   const domainMeshesRef = useRef<THREE.Mesh[]>([]);
@@ -213,16 +217,22 @@ export default function Graph3D({
       const mat = mesh.material as THREE.MeshStandardMaterial;
       const isSelected = nodeId === selectedNoteIdRef.current;
       if (nodeId === hovId) {
-        mat.emissiveIntensity = 1.3;
+        // Source node: very bright — above bloom threshold
+        mat.emissiveIntensity = 2.5;
         mat.opacity = 1.0;
       } else if (hovId) {
         const dist = activationMap.get(nodeId);
-        mat.emissiveIntensity = dist !== undefined
-          ? calculateActivationIntensity(dist) * 0.55
-          : 0;
-        mat.opacity = dist !== undefined ? 0.92 : 0.14;
+        if (dist !== undefined) {
+          // dist=1 → 1.2, dist=2 → 0.6  (both above bloom threshold 0.12)
+          mat.emissiveIntensity = calculateActivationIntensity(dist) * 2.0;
+          mat.opacity = 0.95;
+        } else {
+          mat.emissiveIntensity = isSelected ? 0.55 : 0;
+          // Dim non-activated nodes significantly
+          mat.opacity = 0.07;
+        }
       } else {
-        mat.emissiveIntensity = isSelected ? 0.55 : 0;
+        mat.emissiveIntensity = isSelected ? 0.8 : 0;
         mat.opacity = 0.92;
       }
     });
@@ -235,8 +245,43 @@ export default function Graph3D({
     }
   }, [logEdgeInteraction]);
 
-  // Handle node click — navigate + Hebbian access log
+  // Focus / activation spreading from selectedNoteId even without hover
+  // Runs when selectedNoteId, activationEnabled, or nodes change
+  useEffect(() => {
+    if (nodeObjectsMap.current.size === 0) return;
+    const srcId = activationEnabled ? (focusNodeId ?? selectedNoteId) : null;
+    if (!srcId) {
+      // No focus: restore base state
+      nodeObjectsMap.current.forEach((mesh, nodeId) => {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        const isSelected = nodeId === selectedNoteId;
+        mat.emissiveIntensity = isSelected ? 0.8 : 0;
+        mat.opacity = 0.92;
+      });
+      return;
+    }
+    const activationMap = getKHopNeighbors(srcId, adjacencyMapRef.current, 2);
+    nodeObjectsMap.current.forEach((mesh, nodeId) => {
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      if (nodeId === srcId) {
+        mat.emissiveIntensity = 2.0;
+        mat.opacity = 1.0;
+      } else {
+        const dist = activationMap.get(nodeId);
+        if (dist !== undefined) {
+          mat.emissiveIntensity = calculateActivationIntensity(dist) * 1.8;
+          mat.opacity = 0.95;
+        } else {
+          mat.emissiveIntensity = 0;
+          mat.opacity = 0.09;
+        }
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNoteId, activationEnabled, focusNodeId]);
+
   const handleNodeClick = useCallback((node: any) => {
+    if (!node) return;
     logNoteAccess(node.id);
     onSelectNote(node.id);
 

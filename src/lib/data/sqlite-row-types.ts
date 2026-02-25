@@ -16,6 +16,7 @@ export interface TagRow {
     user_id: string;
     name: string;
     color: string | null;
+    icon: string | null;
     created_at: string;
 }
 
@@ -32,6 +33,7 @@ export interface NoteTagJoinRow {
     t_user_id: string;
     name: string;
     color: string | null;
+    icon: string | null;
     t_created_at: string;
 }
 

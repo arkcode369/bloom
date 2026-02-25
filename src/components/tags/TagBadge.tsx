@@ -46,6 +46,7 @@ export default function TagBadge({
         color: textColor,
       }}
     >
+      {tag.icon && <span className="leading-none">{tag.icon}</span>}
       {tag.name}
       {onRemove && (
         <button

@@ -643,3 +643,26 @@
     background-clip: text;
   }
 }
+
+/* ── Knowledge-graph activation glow animations ─────────────────────── */
+@keyframes ag-pulse-src {
+  0%, 100% { opacity: 0.70; }
+  50%       { opacity: 0.18; }
+}
+@keyframes ag-pulse-n1 {
+  0%, 100% { opacity: 0.45; }
+  50%       { opacity: 0.08; }
+}
+@keyframes ag-pulse-n2 {
+  0%, 100% { opacity: 0.22; }
+  50%       { opacity: 0.04; }
+}
+/* source node rings */
+.ag-src-inner  { animation: ag-pulse-src 1.2s ease-in-out infinite both; }
+.ag-src-mid    { animation: ag-pulse-src 1.6s ease-in-out 0.2s infinite both; }
+.ag-src-outer  { animation: ag-pulse-src 2.0s ease-in-out 0.4s infinite both; }
+/* direct-neighbor rings */
+.ag-n1-inner   { animation: ag-pulse-n1 1.4s ease-in-out infinite both; }
+.ag-n1-outer   { animation: ag-pulse-n1 1.8s ease-in-out 0.25s infinite both; }
+/* 2-hop ring */
+.ag-n2         { animation: ag-pulse-n2 2.0s ease-in-out infinite both; }

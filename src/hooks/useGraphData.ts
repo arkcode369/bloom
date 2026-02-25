@@ -6,6 +6,7 @@ export interface TagInfo {
   id: string;
   name: string;
   color: string;
+  icon?: string | null;
 }
 
 export interface GraphNode {
@@ -87,6 +88,7 @@ export function useGraphData() {
           id: tag.id,
           name: tag.name,
           color: tag.color || '#8B9A7C',
+          icon: tag.icon ?? null,
         };
       });
 
