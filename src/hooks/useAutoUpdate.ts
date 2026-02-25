@@ -52,6 +52,7 @@ export function useAutoUpdate(): UpdateStatus {
   const [availableVersion, setAvailableVersion] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const updateRef = useRef<Update | null>(null);
+  const isDev = import.meta.env.DEV;
 
   // Get current version on mount
   useEffect(() => {
@@ -59,6 +60,11 @@ export function useAutoUpdate(): UpdateStatus {
   }, []);
 
   const performCheck = useCallback(async () => {
+    // Skip update check in development mode
+    if (isDev) {
+      console.log('[AutoUpdate] Skipping update check in development mode');
+      return;
+    }
     // Don't check if already checking or downloading
     if (checking || downloading || readyToInstall) return;
 

@@ -39,6 +39,7 @@ jobs:
         run: npm install
 
       - name: Build and release Tauri app
+        id: tauri_build
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -59,3 +60,44 @@ jobs:
           args: ${{ matrix.args }}
           includeUpdaterJson: true
           tauriScript: npm run tauri
+
+      # -- Publish latest.json to a public GitHub Gist so the auto-updater
+      #    can reach it even though this repo is private.
+      - name: Download latest.json from release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $repo = "${{ github.repository }}"
+          $headers = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = "application/vnd.github+json" }
+
+          # Wait a moment for the release assets to be fully uploaded
+          Start-Sleep -Seconds 10
+
+          # Fetch release by tag
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/$tag" -Headers $headers
+          $asset = $release.assets | Where-Object { $_.name -eq 'latest.json' }
+          if (-not $asset) { throw "latest.json asset not found in release $tag" }
+
+          # Download asset content via API
+          $dlHeaders = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = "application/octet-stream" }
+          Invoke-WebRequest -Uri $asset.url -Headers $dlHeaders -OutFile "latest.json"
+          Write-Host "Downloaded latest.json:"
+          Get-Content "latest.json"
+
+      - name: Update public Gist with latest.json
+        env:
+          GIST_TOKEN: ${{ secrets.GIST_PAT }}
+          GIST_ID: ${{ secrets.UPDATER_GIST_ID }}
+        run: |
+          $content = Get-Content "latest.json" -Raw
+          $body = @{
+            files = @{
+              "latest.json" = @{
+                content = $content
+              }
+            }
+          } | ConvertTo-Json -Depth 4
+          $headers = @{ Authorization = "Bearer $env:GIST_TOKEN"; Accept = "application/vnd.github+json" }
+          Invoke-RestMethod -Uri "https://api.github.com/gists/$env:GIST_ID" -Method Patch -Headers $headers -Body $body -ContentType "application/json; charset=utf-8"
+          Write-Host "Gist updated successfully"
