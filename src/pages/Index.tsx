@@ -30,6 +30,8 @@ import { DebugWrapper } from '@/components/calendar/DebugWrapper';
 import { useGlobalShortcuts } from '@/hooks/useGlobalShortcuts';
 import { usePreferences } from '@/hooks/usePreferences';
 import { useWidgetWindow } from '@/hooks/useWidgetWindow';
+import { AppContextMenu } from '@/components/layout/AppContextMenu';
+import HelpPanel from '@/components/help/HelpPanel';
 import {
   FileText,
   Star,
@@ -154,6 +156,21 @@ export default function Index() {
 
   return (
     <SidebarProvider>
+      <AppContextMenu
+        onCreateNote={() => handleCreateNote()}
+        onGoHome={nav.handleGoHome}
+        onViewAllNotes={nav.handleViewAllNotes}
+        onViewStarred={nav.handleViewStarred}
+        onViewPlanner={() => {
+          nav.setSelectedNoteId(null);
+          nav.setSelectedTagId(null);
+          nav.setViewMode('planner');
+        }}
+        onOpenGraph={dialogs.openGraph}
+        onOpenSearch={dialogs.openCommandPalette}
+        onOpenSettings={dialogs.openSettings}
+        onOpenHelp={dialogs.openHelp}
+      >
       <div className="flex h-screen w-full overflow-hidden">
         <AppSidebar
           selectedNoteId={nav.selectedNoteId}
@@ -319,7 +336,14 @@ export default function Index() {
           onCapture={handleCreateNote}
           isCreating={createNote.isPending}
         />
+
+        <HelpPanel
+          open={dialogs.showHelp}
+          onOpenChange={dialogs.setShowHelp}
+        />
       </div>
+      </AppContextMenu>
     </SidebarProvider>
+
   );
 }

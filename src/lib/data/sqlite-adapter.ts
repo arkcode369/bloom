@@ -133,6 +133,7 @@ function mapRowToTarget(row: TargetRow): Target {
     priority: row.priority as TargetPriority,
     note_ids: noteIds,
     sort_order: row.sort_order,
+    carried_from_id: row.carried_from_id ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -190,6 +191,29 @@ async function checkTagIconCol(db: ReturnType<typeof getDatabase>): Promise<bool
     }
   })();
   return tagIconColPromise;
+}
+
+// Whether the `carried_from_id` column exists on `targets`. Self-healing like the icon column.
+let targetCarriedColPromise: Promise<boolean> | null = null;
+
+async function checkTargetCarriedCol(db: ReturnType<typeof getDatabase>): Promise<boolean> {
+  if (targetCarriedColPromise !== null) return targetCarriedColPromise;
+  targetCarriedColPromise = (async () => {
+    try {
+      const cols = await (db as any).select<Array<{ name: string }>>('PRAGMA table_info(targets)');
+      const exists = Array.isArray(cols) && cols.some((c: any) => c.name === 'carried_from_id');
+      if (exists) return true;
+      try {
+        await (db as any).execute('ALTER TABLE targets ADD COLUMN carried_from_id TEXT DEFAULT NULL');
+        return true;
+      } catch {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+  })();
+  return targetCarriedColPromise;
 }
 
 export function createSQLiteAdapter(): DataAdapter {
@@ -1175,6 +1199,66 @@ export function createSQLiteAdapter(): DataAdapter {
       async getDailyPlanWithDetails(date: string): Promise<DailyPlanWithDetails> {
         const plan = await this.getOrCreateDailyPlan(date);
 
+        // --- Carryover incomplete targets from the previous day ---
+        try {
+          const userId = ensureUserId();
+          const db = await ensureDb();
+          const hasCarriedCol = await checkTargetCarriedCol(db);
+
+          if (hasCarriedCol) {
+            // Compute previous day date string (YYYY-MM-DD)
+            const d = new Date(date + 'T00:00:00');
+            d.setDate(d.getDate() - 1);
+            const prevDate = d.toISOString().slice(0, 10);
+
+            // Find previous day's plan
+            const prevPlanRows = await db.select<DailyPlanRow[]>(
+              'SELECT * FROM daily_plans WHERE user_id = ? AND plan_date = ?',
+              [userId, prevDate]
+            );
+
+            if (prevPlanRows.length > 0) {
+              const prevPlanId = prevPlanRows[0].id;
+
+              // Get incomplete targets from previous day that have NOT already been carried to today
+              const incompleteTargets = await db.select<TargetRow[]>(
+                `SELECT t.* FROM targets t
+                 WHERE t.daily_plan_id = ? AND t.status IN ('pending', 'in_progress')
+                 AND NOT EXISTS (
+                   SELECT 1 FROM targets t2 WHERE t2.carried_from_id = t.id AND t2.daily_plan_id = ?
+                 )`,
+                [prevPlanId, plan.id]
+              );
+
+              // Clone them into today's plan
+              if (incompleteTargets.length > 0) {
+                const now = getCurrentTimestamp();
+                const maxOrderResult = await db.select<{ max_order: number | null }[]>(
+                  'SELECT MAX(sort_order) as max_order FROM targets WHERE daily_plan_id = ?',
+                  [plan.id]
+                );
+                let sortOrder = (maxOrderResult[0]?.max_order ?? -1) + 1;
+
+                for (const t of incompleteTargets) {
+                  const newId = generateUUID();
+                  await db.execute(
+                    `INSERT INTO targets (id, user_id, daily_plan_id, title, description, target_type, estimated_minutes, actual_minutes, status, priority, note_ids, sort_order, carried_from_id, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'pending', ?, ?, ?, ?, ?, ?)`,
+                    [
+                      newId, userId, plan.id, t.title, t.description,
+                      t.target_type, t.estimated_minutes,
+                      t.priority, t.note_ids, sortOrder, t.id, now, now,
+                    ]
+                  );
+                  sortOrder++;
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[Carryover] Failed to carry over targets:', err);
+        }
+
         const targets = await this.getTargets(plan.id);
         const timeBlocks = await this.getTimeBlocks(plan.id);
 
@@ -1260,6 +1344,7 @@ export function createSQLiteAdapter(): DataAdapter {
           priority: (input.priority || 'medium') as TargetPriority,
           note_ids: [],
           sort_order: sortOrder,
+          carried_from_id: null,
           created_at: now,
           updated_at: now,
         };

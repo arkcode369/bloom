@@ -47,6 +47,10 @@ export default function Graph3D({
 
   // Per-node Three.js mesh map for dynamic material updates (emissive activation)
   const nodeObjectsMap = useRef<Map<string, THREE.Mesh>>(new Map());
+  // d3 mutates these node objects in-place with x,y,z — keep a ref so renderDomains
+  // can read settled positions without relying on fgRef.current.graphData()
+  // (which is not exposed in ForceGraphMethods).
+  const settledNodesRef = useRef<any[]>([]);
   const selectedNoteIdRef = useRef(selectedNoteId);
   useEffect(() => { selectedNoteIdRef.current = selectedNoteId; }, [selectedNoteId]);
 
@@ -167,6 +171,11 @@ export default function Graph3D({
     })),
     links: links.map(link => ({ ...link })),
   }), [nodes, links]);
+
+  // Keep settledNodesRef in sync — d3 mutates these objects in-place with x,y,z
+  useEffect(() => {
+    settledNodesRef.current = graphData.nodes;
+  }, [graphData.nodes]);
 
   // Build custom THREE.js node: MeshStandardMaterial sphere + SpriteText label
   const getNodeThreeObject = useCallback((node: any) => {
@@ -352,15 +361,9 @@ export default function Graph3D({
 
     if (!domains || !tags || !visible) return;
 
-    // Get graph data with settled node positions
-    let gNodes: any[] = [];
-    try {
-      const gData = typeof fgRef.current.graphData === 'function'
-        ? fgRef.current.graphData()
-        : fgRef.current.graphData;
-      gNodes = gData?.nodes || [];
-    } catch { return; }
-
+    // Get settled node positions — graphData.nodes are the same objects d3
+    // mutates in-place with x,y,z after the simulation completes.
+    const gNodes = settledNodesRef.current;
     if (gNodes.length === 0) return;
 
     tags.forEach(tag => {

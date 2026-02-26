@@ -7,6 +7,7 @@ export function useDialogs() {
     const [showSettings, setShowSettings] = useState(false);
     const [showArchive, setShowArchive] = useState(false);
     const [showQuickCapture, setShowQuickCapture] = useState(false);
+    const [showHelp, setShowHelp] = useState(false);
     const [deleteNoteId, setDeleteNoteId] = useState<string | null>(null);
 
     const openSearch = useCallback(() => setShowSearchDialog(true), []);
@@ -15,6 +16,7 @@ export function useDialogs() {
     const openSettings = useCallback(() => setShowSettings(true), []);
     const openArchive = useCallback(() => setShowArchive(true), []);
     const openQuickCapture = useCallback(() => setShowQuickCapture(true), []);
+    const openHelp = useCallback(() => setShowHelp(true), []);
 
     return {
         showSearchDialog,
@@ -29,6 +31,8 @@ export function useDialogs() {
         setShowArchive,
         showQuickCapture,
         setShowQuickCapture,
+        showHelp,
+        setShowHelp,
         deleteNoteId,
         setDeleteNoteId,
         openSearch,
@@ -37,5 +41,6 @@ export function useDialogs() {
         openSettings,
         openArchive,
         openQuickCapture,
+        openHelp,
     };
 }

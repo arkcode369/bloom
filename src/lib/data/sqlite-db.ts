@@ -142,6 +142,7 @@ const SCHEMA_SQL = [
     priority TEXT NOT NULL DEFAULT 'medium',
     note_ids TEXT DEFAULT '[]',
     sort_order INTEGER NOT NULL DEFAULT 0,
+    carried_from_id TEXT DEFAULT NULL,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (daily_plan_id) REFERENCES daily_plans(id) ON DELETE CASCADE
@@ -381,6 +382,19 @@ export async function initDatabase(): Promise<Database> {
     await db.execute('UPDATE schema_version SET version = 8');
     console.log('✅ Migration to version 8 complete');
     currentVersion = 8;
+  }
+
+  if (currentVersion < 9) {
+    console.log('🔄 Migrating database to version 9 (Target carryover)...');
+    try {
+      await db.execute('ALTER TABLE targets ADD COLUMN carried_from_id TEXT DEFAULT NULL');
+      console.log('✅ Added carried_from_id to targets');
+    } catch {
+      // Column may already exist
+    }
+    await db.execute('UPDATE schema_version SET version = 9');
+    console.log('✅ Migration to version 9 complete');
+    currentVersion = 9;
   }
 
   isInitialized = true;

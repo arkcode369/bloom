@@ -99,6 +99,7 @@ export interface Target {
   priority: TargetPriority;
   note_ids: string[];
   sort_order: number;
+  carried_from_id: string | null;
   created_at: string;
   updated_at: string;
 }

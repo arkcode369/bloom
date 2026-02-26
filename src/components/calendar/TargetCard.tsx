@@ -14,6 +14,7 @@ import {
   PlayCircle,
   SkipForward,
   Pencil,
+  RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -176,6 +177,12 @@ export function TargetCard({ target, onUpdate, onDelete, isDragging }: TargetCar
                   <Badge variant={priorityConfig.variant} className="h-4 text-[9px] px-1.5">
                     {t(priorityConfig.label)}
                   </Badge>
+                  {target.carried_from_id && (
+                    <Badge variant="outline" className="h-4 text-[9px] px-1.5 gap-0.5 text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-600">
+                      <RotateCcw className="w-2.5 h-2.5" />
+                      {t('planning.carried_over', 'Carried over')}
+                    </Badge>
+                  )}
                 </div>
 
                 {/* Meta row */}
