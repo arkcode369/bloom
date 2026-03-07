@@ -1,4 +1,5 @@
 import React, { useMemo, useCallback, useEffect, useRef, useState } from "react";
+import { TextReplacementExtension } from "./textReplacementExtension";
 import {
   BlockNoteSchema,
   defaultInlineContentSpecs,
@@ -74,6 +75,9 @@ export default function BlockNoteEditorComponent({
   const editor = useCreateBlockNote({
     schema,
     initialContent: initialBlocks as PartialBlock<typeof schema.blockSchema, typeof schema.inlineContentSchema, typeof schema.styleSchema>[],
+    _tiptapOptions: {
+      extensions: [TextReplacementExtension],
+    },
     uploadFile: async (file: File) => {
       try {
         const assetUrl = await saveAsset(file);

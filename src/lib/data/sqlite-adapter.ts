@@ -1206,15 +1206,10 @@ export function createSQLiteAdapter(): DataAdapter {
           const hasCarriedCol = await checkTargetCarriedCol(db);
 
           if (hasCarriedCol) {
-            // Compute previous day date string (YYYY-MM-DD)
-            const d = new Date(date + 'T00:00:00');
-            d.setDate(d.getDate() - 1);
-            const prevDate = d.toISOString().slice(0, 10);
-
-            // Find previous day's plan
+            // Find the most recent prior plan (not just yesterday) to handle skipped days
             const prevPlanRows = await db.select<DailyPlanRow[]>(
-              'SELECT * FROM daily_plans WHERE user_id = ? AND plan_date = ?',
-              [userId, prevDate]
+              'SELECT * FROM daily_plans WHERE user_id = ? AND plan_date < ? ORDER BY plan_date DESC LIMIT 1',
+              [userId, date]
             );
 
             if (prevPlanRows.length > 0) {
