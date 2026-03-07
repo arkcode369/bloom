@@ -1,23 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import HelpPanel from '@/components/help/HelpPanel';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
-import { useNotes, useStarredNotes, Note } from '@/hooks/useNotes';
+import { useNotes, useStarredNotes } from '@/hooks/useNotes';
+import { useTagsWithCounts } from '@/hooks/useTags';
 import ProfileAvatar from '@/components/profile/ProfileAvatar';
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
-  SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
@@ -38,6 +37,9 @@ import {
   Home,
   HelpCircle,
   CalendarDays,
+  X,
+  MoreHorizontal,
+  ArrowUpDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActiveTimeBlock } from '@/hooks/useActiveTimeBlock';
@@ -47,6 +49,15 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import TagManager from '@/components/tags/TagManager';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from '@/components/ui/dropdown-menu';
 
 type ActiveView = 'home' | 'all' | 'starred' | 'tag' | 'note' | 'planner';
 
@@ -66,6 +77,14 @@ interface AppSidebarProps {
   onViewPlanner: () => void;
   activeView: ActiveView;
   isCreating?: boolean;
+  flyoutPanel: null | 'tags' | 'recent';
+  onSetFlyoutPanel: (p: null | 'tags' | 'recent') => void;
+  notesSortBy: 'edited' | 'created' | 'title';
+  onSetNotesSortBy: (v: 'edited' | 'created' | 'title') => void;
+  tagsSortBy: 'name' | 'count';
+  onSetTagsSortBy: (v: 'name' | 'count') => void;
+  showCreateTag: boolean;
+  onSetShowCreateTag: (v: boolean) => void;
 }
 
 export default function AppSidebar({
@@ -84,6 +103,14 @@ export default function AppSidebar({
   onViewPlanner,
   activeView,
   isCreating,
+  flyoutPanel,
+  onSetFlyoutPanel,
+  notesSortBy,
+  onSetNotesSortBy,
+  tagsSortBy,
+  onSetTagsSortBy,
+  showCreateTag,
+  onSetShowCreateTag,
 }: AppSidebarProps) {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -97,7 +124,19 @@ export default function AppSidebar({
   const [notesExpanded, setNotesExpanded] = useState(true);
   const [tagsExpanded, setTagsExpanded] = useState(true);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [tagsMenuOpen, setTagsMenuOpen] = useState(false);
+  const [notesMenuOpen, setNotesMenuOpen] = useState(false);
   const activeTimeBlock = useActiveTimeBlock();
+
+  const sortedNotes = useMemo(() => {
+    if (!notes) return [];
+    const arr = [...notes];
+    if (notesSortBy === 'edited') arr.sort((a, b) => (b.updated_at > a.updated_at ? 1 : -1));
+    else if (notesSortBy === 'created') arr.sort((a, b) => (b.created_at > a.created_at ? 1 : -1));
+    else arr.sort((a, b) => a.title.localeCompare(b.title));
+    return arr;
+  }, [notes, notesSortBy]);
+  const displayNotes = sortedNotes.slice(0, 10);
 
   const formatRemaining = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -109,11 +148,8 @@ export default function AppSidebar({
     return `${m}m`;
   };
 
-  const recentNotes = notes?.slice(0, 10) || [];
-
   return (
     <Sidebar collapsible="icon">
-      {/* Header */}
       <SidebarHeader className="border-b">
         <div className={cn(
           'flex items-center gap-2 p-3',
@@ -129,7 +165,6 @@ export default function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        {/* Quick Actions */}
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -162,30 +197,14 @@ export default function AppSidebar({
 
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  onClick={onCreateNote}
-                  tooltip={t('sidebar.new_note')}
-                  disabled={isCreating}
-                  className="gap-2"
-                >
-                  {isCreating ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plus className="h-4 w-4" />
-                  )}
-                  {!collapsed && <span className="font-body text-sm">{t('sidebar.new_note')}</span>}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton
                   onClick={onViewAllNotes}
-                  tooltip={t('sidebar.all_notes')}
+                  tooltip="Library"
                   className={cn('gap-2', activeView === 'all' && 'bg-accent')}
                 >
                   <Inbox className="h-4 w-4" />
                   {!collapsed && (
                     <>
-                      <span className="font-body text-sm font-medium">{t('sidebar.all_notes')}</span>
+                      <span className="font-body text-sm font-medium">Library</span>
                       <span className="ml-auto text-xs text-muted-foreground">
                         {notes?.length || 0}
                       </span>
@@ -248,23 +267,43 @@ export default function AppSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Tags Section with CRUD */}
         {!collapsed && (
           <SidebarGroup>
             <Collapsible open={tagsExpanded} onOpenChange={setTagsExpanded}>
-              <CollapsibleTrigger asChild>
-                <SidebarGroupLabel className="cursor-pointer hover:bg-accent/50 rounded-md transition-colors">
-                  <div className="flex items-center gap-2 w-full">
-                    {tagsExpanded ? (
-                      <ChevronDown className="h-3 w-3" />
-                    ) : (
-                      <ChevronRight className="h-3 w-3" />
-                    )}
+              <div className="group flex items-center px-2 text-sidebar-foreground/70">
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-1.5 flex-1 min-w-0 py-1.5 text-xs font-medium hover:text-sidebar-foreground transition-colors">
+                    {tagsExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                     <TagIcon className="h-3 w-3" />
-                    <span className="font-body text-sm font-medium">{t('sidebar.tags')}</span>
-                  </div>
-                </SidebarGroupLabel>
-              </CollapsibleTrigger>
+                    <span className="font-body font-medium">{t('sidebar.tags')}</span>
+                  </button>
+                </CollapsibleTrigger>
+                <div className={cn('flex items-center gap-0.5 transition-opacity', tagsMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}>
+                  <DropdownMenu open={tagsMenuOpen} onOpenChange={setTagsMenuOpen}>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className={cn('h-5 w-5', tagsMenuOpen && 'bg-accent')} onClick={(e) => e.stopPropagation()}>
+                        <MoreHorizontal className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40">
+                      <DropdownMenuLabel className="text-xs py-1">Sort by</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuRadioGroup value={tagsSortBy} onValueChange={(v) => onSetTagsSortBy(v as 'name' | 'count')}>
+                        <DropdownMenuRadioItem value="name" className="text-xs">Name</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="count" className="text-xs">Note count</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5"
+                    onClick={(e) => { e.stopPropagation(); onSetShowCreateTag(true); }}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
 
               <CollapsibleContent>
                 <SidebarGroupContent>
@@ -272,6 +311,11 @@ export default function AppSidebar({
                     selectedTagId={selectedTagId}
                     onSelectTag={onSelectTag}
                     collapsed={collapsed}
+                    maxVisible={5}
+                    onViewMore={() => onSetFlyoutPanel('tags')}
+                    forceShowCreate={showCreateTag}
+                    onHideCreate={() => onSetShowCreateTag(false)}
+                    sortBy={tagsSortBy}
                   />
                 </SidebarGroupContent>
               </CollapsibleContent>
@@ -279,38 +323,60 @@ export default function AppSidebar({
           </SidebarGroup>
         )}
 
-        {/* Recent Notes Section */}
         {!collapsed && (
-          <SidebarGroup className="flex-1">
+          <SidebarGroup>
             <Collapsible open={notesExpanded} onOpenChange={setNotesExpanded}>
-              <CollapsibleTrigger asChild>
-                <SidebarGroupLabel className="cursor-pointer hover:bg-accent/50 rounded-md transition-colors">
-                  <div className="flex items-center gap-2 w-full">
-                    {notesExpanded ? (
-                      <ChevronDown className="h-3 w-3" />
-                    ) : (
-                      <ChevronRight className="h-3 w-3" />
-                    )}
+              <div className="group flex items-center px-2 text-sidebar-foreground/70">
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-1.5 flex-1 min-w-0 py-1.5 text-xs font-medium hover:text-sidebar-foreground transition-colors">
+                    {notesExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                     <FileText className="h-3 w-3" />
-                    <span className="font-body text-sm font-medium">{t('sidebar.recent_notes')}</span>
-                  </div>
-                </SidebarGroupLabel>
-              </CollapsibleTrigger>
+                    <span className="font-body font-medium">{t('sidebar.recent_notes')}</span>
+                  </button>
+                </CollapsibleTrigger>
+                <div className={cn('flex items-center gap-0.5 transition-opacity', notesMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}>
+                  <DropdownMenu open={notesMenuOpen} onOpenChange={setNotesMenuOpen}>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className={cn('h-5 w-5', notesMenuOpen && 'bg-accent')} onClick={(e) => e.stopPropagation()}>
+                        <MoreHorizontal className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuLabel className="text-xs py-1">Sort by</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuRadioGroup value={notesSortBy} onValueChange={(v) => onSetNotesSortBy(v as 'edited' | 'created' | 'title')}>
+                        <DropdownMenuRadioItem value="edited" className="text-xs">Last edited</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="created" className="text-xs">Created</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="title" className="text-xs">Title</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5"
+                    onClick={(e) => { e.stopPropagation(); onCreateNote(); }}
+                    disabled={isCreating}
+                  >
+                    {isCreating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                  </Button>
+                </div>
+              </div>
 
               <CollapsibleContent>
                 <SidebarGroupContent>
-                  <ScrollArea className="h-[200px]">
+                  <div>
                     {loadingNotes ? (
                       <div className="flex justify-center py-4">
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                       </div>
-                    ) : recentNotes.length === 0 ? (
+                    ) : displayNotes.length === 0 ? (
                       <p className="text-xs text-muted-foreground px-3 py-2">
                         {t('sidebar.no_notes')}
                       </p>
                     ) : (
                       <SidebarMenu>
-                        {recentNotes.map(note => (
+                        {displayNotes.map(note => (
                           <SidebarMenuItem key={note.id}>
                             <SidebarMenuButton
                               onClick={() => onSelectNote(note.id)}
@@ -330,7 +396,15 @@ export default function AppSidebar({
                         ))}
                       </SidebarMenu>
                     )}
-                  </ScrollArea>
+                    {sortedNotes.length > 10 && (
+                      <button
+                        onClick={() => onSetFlyoutPanel('recent')}
+                        className="w-full text-left px-3 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors mt-0.5"
+                      >
+                        +{sortedNotes.length - 10} more notes...
+                      </button>
+                    )}
+                  </div>
                 </SidebarGroupContent>
               </CollapsibleContent>
             </Collapsible>
@@ -338,7 +412,6 @@ export default function AppSidebar({
         )}
       </SidebarContent>
 
-      {/* Footer */}
       <SidebarFooter className="border-t">
         <SidebarMenu>
           <SidebarMenuItem>
@@ -415,8 +488,215 @@ export default function AppSidebar({
         )}
       </SidebarFooter>
 
-      {/* Help Panel Dialog */}
       <HelpPanel open={helpOpen} onOpenChange={setHelpOpen} />
     </Sidebar>
   );
 }
+
+interface SidebarFlyoutPanelProps {
+  flyoutPanel: 'tags' | 'recent';
+  onClose: () => void;
+  notesSortBy: 'edited' | 'created' | 'title';
+  onSetNotesSortBy: (v: 'edited' | 'created' | 'title') => void;
+  tagsSortBy: 'name' | 'count';
+  onSetTagsSortBy: (v: 'name' | 'count') => void;
+  showCreateTag: boolean;
+  onSetShowCreateTag: (v: boolean) => void;
+  selectedNoteId: string | null;
+  onSelectNote: (id: string) => void;
+  selectedTagId: string | null;
+  onSelectTag: (id: string | null) => void;
+  onViewAllNotes: () => void;
+  onCreateNote: () => void;
+  isCreating?: boolean;
+}
+
+export function SidebarFlyoutPanel({
+  flyoutPanel,
+  onClose,
+  notesSortBy,
+  onSetNotesSortBy,
+  tagsSortBy,
+  onSetTagsSortBy,
+  showCreateTag,
+  onSetShowCreateTag,
+  selectedNoteId,
+  onSelectNote,
+  selectedTagId,
+  onSelectTag,
+  onViewAllNotes,
+  onCreateNote,
+  isCreating,
+}: SidebarFlyoutPanelProps) {
+  const { t } = useTranslation();
+  const { data: notes, isLoading: loadingNotes } = useNotes();
+  const { data: tags } = useTagsWithCounts();
+  const [query, setQuery] = useState('');
+
+  const filteredNotes = useMemo(() => {
+    if (!notes) return [];
+    const arr = [...notes];
+    if (notesSortBy === 'edited') arr.sort((a, b) => (b.updated_at > a.updated_at ? 1 : -1));
+    else if (notesSortBy === 'created') arr.sort((a, b) => (b.created_at > a.created_at ? 1 : -1));
+    else arr.sort((a, b) => a.title.localeCompare(b.title));
+    if (!query.trim()) return arr;
+    return arr.filter(n => n.title.toLowerCase().includes(query.toLowerCase()));
+  }, [notes, notesSortBy, query]);
+
+  const filteredTags = useMemo(() => {
+    if (!tags) return [];
+    if (!query.trim()) return tags;
+    return tags.filter(t => t.name.toLowerCase().includes(query.toLowerCase()));
+  }, [tags, query]);
+
+  return (
+    <div className="h-full bg-sidebar border-l border-sidebar-border flex flex-col overflow-hidden">
+      <div className="flex items-center gap-1 px-2 py-2 border-b border-sidebar-border shrink-0">
+        <span className="font-body text-xs font-semibold flex-1 px-1 truncate">
+          {flyoutPanel === 'tags' ? t('sidebar.tags') : t('sidebar.recent_notes')}
+        </span>
+        {flyoutPanel === 'recent' && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6" title="Sort">
+                <ArrowUpDown className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuLabel className="text-xs py-1">Sort by</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioGroup value={notesSortBy} onValueChange={(v) => onSetNotesSortBy(v as 'edited' | 'created' | 'title')}>
+                <DropdownMenuRadioItem value="edited" className="text-xs">Last edited</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="created" className="text-xs">Created</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="title" className="text-xs">Title</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        {flyoutPanel === 'tags' && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6" title="Sort">
+                <ArrowUpDown className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuLabel className="text-xs py-1">Sort by</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioGroup value={tagsSortBy} onValueChange={(v) => onSetTagsSortBy(v as 'name' | 'count')}>
+                <DropdownMenuRadioItem value="name" className="text-xs">Name</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="count" className="text-xs">Note count</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          title={flyoutPanel === 'tags' ? 'New tag' : 'New note'}
+          disabled={isCreating}
+          onClick={() => {
+            if (flyoutPanel === 'tags') onSetShowCreateTag(true);
+            else onCreateNote();
+          }}
+        >
+          {isCreating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+        </Button>
+        <Button variant="ghost" size="icon" className="h-6 w-6" title="Close" onClick={onClose}>
+          <X className="h-3 w-3" />
+        </Button>
+      </div>
+      <div className="px-2 py-1.5 border-b border-sidebar-border shrink-0">
+        <div className="flex items-center gap-1.5 px-2 h-7 rounded-md bg-muted/60">
+          <Search className="h-3 w-3 text-muted-foreground shrink-0" />
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Filter..."
+            className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+          />
+          {query && (
+            <button onClick={() => setQuery('')} className="text-muted-foreground hover:text-foreground">
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      </div>
+      <ScrollArea className="flex-1">
+        {flyoutPanel === 'tags' ? (
+          <div className="p-2">
+            {showCreateTag && (
+              <TagManager
+                selectedTagId={selectedTagId}
+                onSelectTag={(tagId) => { onSelectTag(tagId); onClose(); }}
+                collapsed={false}
+                maxVisible={0}
+                forceShowCreate={showCreateTag}
+                onHideCreate={() => onSetShowCreateTag(false)}
+                sortBy={tagsSortBy}
+              />
+            )}
+            {filteredTags.length === 0 ? (
+              <p className="text-xs text-muted-foreground px-3 py-2">{query ? 'No matching tags' : t('sidebar.no_tags')}</p>
+            ) : (
+              <SidebarMenu>
+                {filteredTags.map(tag => (
+                  <SidebarMenuItem key={tag.id}>
+                    <SidebarMenuButton
+                      onClick={() => { onSelectTag(tag.id); onClose(); }}
+                      className={cn('gap-2', selectedTagId === tag.id && 'bg-accent')}
+                    >
+                      <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: tag.color || '#94a3b8' }} />
+                      <span className="truncate text-sm">{tag.name}</span>
+                      <span className="ml-auto text-xs text-muted-foreground">{tag.note_count}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            )}
+          </div>
+        ) : (
+          <div className="p-2">
+            {loadingNotes ? (
+              <div className="flex justify-center py-4">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            ) : filteredNotes.length === 0 ? (
+              <p className="text-xs text-muted-foreground px-3 py-2">{query ? 'No matching notes' : t('sidebar.no_notes')}</p>
+            ) : (
+              <SidebarMenu>
+                {filteredNotes.map(note => (
+                  <SidebarMenuItem key={note.id}>
+                    <SidebarMenuButton
+                      onClick={() => { onSelectNote(note.id); onClose(); }}
+                      className={cn('gap-2', selectedNoteId === note.id && 'bg-accent')}
+                    >
+                      {note.is_starred
+                        ? <Star className="h-3 w-3 fill-amber-400 text-amber-400 shrink-0" />
+                        : <FileText className="h-3 w-3 shrink-0" />}
+                      <span className="truncate text-sm">{note.title}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            )}
+          </div>
+        )}
+      </ScrollArea>
+
+      {flyoutPanel === 'recent' && (
+        <div className="border-t border-sidebar-border shrink-0 p-2">
+          <Button
+            variant="ghost"
+            className="w-full h-8 text-xs font-medium justify-center"
+            onClick={onViewAllNotes}
+          >
+            Open in Library
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+

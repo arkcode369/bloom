@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTagsWithCounts, useUpdateTag, useDeleteTag, useCreateTag, TAG_COLORS, TAG_ICONS } from '@/hooks/useTags';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { 
   Plus, 
@@ -34,9 +33,14 @@ interface TagManagerProps {
   selectedTagId: string | null;
   onSelectTag: (tagId: string | null) => void;
   collapsed?: boolean;
+  maxVisible?: number;
+  onViewMore?: () => void;
+  forceShowCreate?: boolean;
+  onHideCreate?: () => void;
+  sortBy?: 'name' | 'count';
 }
 
-export default function TagManager({ selectedTagId, onSelectTag, collapsed }: TagManagerProps) {
+export default function TagManager({ selectedTagId, onSelectTag, collapsed, maxVisible, onViewMore, forceShowCreate, onHideCreate, sortBy }: TagManagerProps) {
   const { t } = useTranslation();
   const { data: tagsWithCounts, isLoading } = useTagsWithCounts();
   const updateTag = useUpdateTag();
@@ -103,6 +107,24 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
     setShowCreate(false);
   };
 
+  useEffect(() => {
+    if (forceShowCreate) {
+      setShowCreate(true);
+      onHideCreate?.();
+    }
+  }, [forceShowCreate]);
+
+  const sortedTags = useMemo(() => {
+    if (!tagsWithCounts) return [];
+    const arr = [...tagsWithCounts];
+    if (sortBy === 'count') arr.sort((a, b) => b.noteCount - a.noteCount);
+    else arr.sort((a, b) => a.name.localeCompare(b.name));
+    return arr;
+  }, [tagsWithCounts, sortBy]);
+
+  const visibleTags = maxVisible ? sortedTags.slice(0, maxVisible) : sortedTags;
+  const hiddenCount = maxVisible ? Math.max(0, sortedTags.length - maxVisible) : 0;
+
   if (collapsed) return null;
 
   return (
@@ -113,14 +135,14 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
         </div>
       ) : (
         <>
-          <ScrollArea className="max-h-[200px]">
-            {tagsWithCounts?.length === 0 ? (
+          <div>
+            {visibleTags?.length === 0 ? (
               <p className="text-xs text-muted-foreground px-2 py-2">
                 {t('tags.no_tags')}
               </p>
             ) : (
               <div className="space-y-0.5">
-                {tagsWithCounts?.map(tag => (
+                {visibleTags?.map(tag => (
                   <div key={tag.id} className="group">
                     {editingId === tag.id ? (
                       <div className="flex items-center gap-1 px-2 py-1">
@@ -262,10 +284,18 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
                 ))}
               </div>
             )}
-          </ScrollArea>
+            {hiddenCount > 0 && onViewMore && (
+              <button
+                onClick={onViewMore}
+                className="w-full text-left px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors mt-0.5"
+              >
+                +{hiddenCount} more tags...
+              </button>
+            )}
+          </div>
 
           {/* Create new tag */}
-          {showCreate ? (
+          {showCreate && (
             <div className="flex items-center gap-1 px-2 py-1 border-t mt-2 pt-2">
               {/* Color picker popover — create */}
               <Popover>
@@ -356,16 +386,6 @@ export default function TagManager({ selectedTagId, onSelectTag, collapsed }: Ta
                 <X className="h-3 w-3" />
               </Button>
             </div>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start gap-2 h-7 text-xs text-muted-foreground"
-              onClick={() => setShowCreate(true)}
-            >
-              <Plus className="h-3 w-3" />
-              {t('tags.new_tag')}
-            </Button>
           )}
         </>
       )}

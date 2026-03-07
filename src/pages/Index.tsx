@@ -1,4 +1,5 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { listen } from '@tauri-apps/api/event';
 import { useProfile } from '@/hooks/useProfile';
 import {
@@ -13,7 +14,7 @@ import { useNotesByTag, useTags } from '@/hooks/useTags';
 import { useDialogs } from '@/hooks/useDialogs';
 import { useViewNavigation } from '@/hooks/useViewNavigation';
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
-import AppSidebar from '@/components/layout/AppSidebar';
+import AppSidebar, { SidebarFlyoutPanel } from '@/components/layout/AppSidebar';
 import NoteEditor from '@/components/notes/NoteEditor';
 import NotesListView from '@/components/notes/NotesListView';
 import SearchDialog from '@/components/search/SearchDialog';
@@ -62,7 +63,6 @@ export default function Index() {
   const archiveNote = useArchiveNote();
   const deleteNote = useDeleteNote();
 
-  // Initialize widget window (auto show/hide based on active timeblock)
   useWidgetWindow();
 
   const selectedNote = notes?.find(n => n.id === nav.selectedNoteId);
@@ -90,7 +90,6 @@ export default function Index() {
     dialogs.openQuickCapture();
   }, preferences.widget.quickCaptureAsWidget);
 
-  // Listen for navigate-to-note events from widget windows
   useEffect(() => {
     let active = true;
     let unlisten: (() => void) | undefined;
@@ -154,6 +153,11 @@ export default function Index() {
     }
   };
 
+  const [flyoutPanel, setFlyoutPanel] = useState<null | 'tags' | 'recent'>(null);
+  const [notesSortBy, setNotesSortBy] = useState<'edited' | 'created' | 'title'>('edited');
+  const [tagsSortBy, setTagsSortBy] = useState<'name' | 'count'>('name');
+  const [showCreateTag, setShowCreateTag] = useState(false);
+
   return (
     <SidebarProvider>
       <AppContextMenu
@@ -192,9 +196,50 @@ export default function Index() {
           }}
           activeView={nav.viewMode}
           isCreating={createNote.isPending}
+          flyoutPanel={flyoutPanel}
+          onSetFlyoutPanel={setFlyoutPanel}
+          notesSortBy={notesSortBy}
+          onSetNotesSortBy={setNotesSortBy}
+          tagsSortBy={tagsSortBy}
+          onSetTagsSortBy={setTagsSortBy}
+          showCreateTag={showCreateTag}
+          onSetShowCreateTag={setShowCreateTag}
         />
 
-        <SidebarInset className="flex flex-col min-w-0">
+        <AnimatePresence>
+          {flyoutPanel && (
+            <motion.div
+              key="flyout-panel"
+              initial={{ width: 0 }}
+              animate={{ width: 240 }}
+              exit={{ width: 0 }}
+              transition={{ duration: 0.15 }}
+              className="h-screen shrink-0 overflow-hidden"
+            >
+              <SidebarFlyoutPanel
+                flyoutPanel={flyoutPanel}
+                onClose={() => setFlyoutPanel(null)}
+                notesSortBy={notesSortBy}
+                onSetNotesSortBy={setNotesSortBy}
+                tagsSortBy={tagsSortBy}
+                onSetTagsSortBy={setTagsSortBy}
+                showCreateTag={showCreateTag}
+                onSetShowCreateTag={setShowCreateTag}
+                selectedNoteId={nav.selectedNoteId}
+                onSelectNote={(id) => { nav.handleSelectNote(id); setFlyoutPanel(null); }}
+                selectedTagId={nav.selectedTagId}
+                onSelectTag={(id) => { nav.handleSelectTag(id); setFlyoutPanel(null); }}
+                onViewAllNotes={() => { nav.handleViewAllNotes(); setFlyoutPanel(null); }}
+                onCreateNote={() => handleCreateNote()}
+                isCreating={createNote.isPending}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <SidebarInset
+          className="flex flex-col min-w-0"
+        >
           <header className="h-12 flex items-center border-b px-4 lg:hidden bg-card">
             <SidebarTrigger className="mr-2" />
             <div className="flex items-center gap-2">
