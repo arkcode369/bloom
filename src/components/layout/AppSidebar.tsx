@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import HelpPanel from '@/components/help/HelpPanel';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
-import { useNotes, useStarredNotes } from '@/hooks/useNotes';
+import { useNotes } from '@/hooks/useNotes';
 import { useTagsWithCounts } from '@/hooks/useTags';
 import ProfileAvatar from '@/components/profile/ProfileAvatar';
 import {
@@ -17,6 +17,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
+  SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
@@ -29,7 +30,6 @@ import {
   Tag as TagIcon,
   Settings,
   Inbox,
-  Archive,
   ChevronDown,
   ChevronRight,
   Loader2,
@@ -68,12 +68,10 @@ interface AppSidebarProps {
   onOpenSearch: () => void;
   onOpenGraph: () => void;
   onOpenSettings: () => void;
-  onOpenArchive: () => void;
   selectedTagId: string | null;
   onSelectTag: (tagId: string | null) => void;
   onGoHome: () => void;
   onViewAllNotes: () => void;
-  onViewStarred: () => void;
   onViewPlanner: () => void;
   activeView: ActiveView;
   isCreating?: boolean;
@@ -94,12 +92,10 @@ export default function AppSidebar({
   onOpenSearch,
   onOpenGraph,
   onOpenSettings,
-  onOpenArchive,
   selectedTagId,
   onSelectTag,
   onGoHome,
   onViewAllNotes,
-  onViewStarred,
   onViewPlanner,
   activeView,
   isCreating,
@@ -119,14 +115,26 @@ export default function AppSidebar({
   const collapsed = state === 'collapsed';
 
   const { data: notes, isLoading: loadingNotes } = useNotes();
-  const { data: starredNotes } = useStarredNotes();
 
   const [notesExpanded, setNotesExpanded] = useState(true);
   const [tagsExpanded, setTagsExpanded] = useState(true);
   const [helpOpen, setHelpOpen] = useState(false);
   const [tagsMenuOpen, setTagsMenuOpen] = useState(false);
   const [notesMenuOpen, setNotesMenuOpen] = useState(false);
+  const [sidebarScrolled, setSidebarScrolled] = useState(false);
+  const sidebarContentRef = useRef<HTMLDivElement>(null);
   const activeTimeBlock = useActiveTimeBlock();
+
+  const handleSidebarScroll = useCallback(() => {
+    setSidebarScrolled((sidebarContentRef.current?.scrollTop ?? 0) > 0);
+  }, []);
+
+  useEffect(() => {
+    const el = sidebarContentRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', handleSidebarScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleSidebarScroll);
+  }, [handleSidebarScroll]);
 
   const sortedNotes = useMemo(() => {
     if (!notes) return [];
@@ -161,11 +169,14 @@ export default function AppSidebar({
           {!collapsed && (
             <span className="font-display font-semibold text-sm">Bloom</span>
           )}
+          {!collapsed && (
+            <SidebarTrigger className="ml-auto h-6 w-6" />
+          )}
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
-        <SidebarGroup>
+      <SidebarContent ref={sidebarContentRef}>
+        <SidebarGroup className={cn('sticky top-0 z-10 bg-sidebar pb-1 transition-[border-color]', sidebarScrolled ? 'border-b border-sidebar-border' : 'border-b border-transparent')}>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
@@ -210,35 +221,6 @@ export default function AppSidebar({
                       </span>
                     </>
                   )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={onViewStarred}
-                  tooltip={t('sidebar.starred')}
-                  className={cn('gap-2', activeView === 'starred' && 'bg-accent')}
-                >
-                  <Star className="h-4 w-4" />
-                  {!collapsed && (
-                    <>
-                      <span className="font-body text-sm font-medium">{t('sidebar.starred')}</span>
-                      <span className="ml-auto text-xs text-muted-foreground">
-                        {starredNotes?.length || 0}
-                      </span>
-                    </>
-                  )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={onOpenArchive}
-                  tooltip={t('sidebar.archive')}
-                  className="gap-2"
-                >
-                  <Archive className="h-4 w-4" />
-                  {!collapsed && <span className="font-body text-sm">{t('sidebar.archive')}</span>}
                 </SidebarMenuButton>
               </SidebarMenuItem>
 

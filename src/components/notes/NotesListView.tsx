@@ -71,6 +71,8 @@ interface NotesListViewProps {
   onSelectNote: (noteId: string) => void;
   onBack: () => void;
   onCreateNote?: () => void;
+  onViewStarred?: () => void;
+  onOpenArchive?: () => void;
   isLoading?: boolean;
 }
 
@@ -84,6 +86,8 @@ export default function NotesListView({
   onSelectNote,
   onBack,
   onCreateNote,
+  onViewStarred,
+  onOpenArchive,
   isLoading,
 }: NotesListViewProps) {
   const { t } = useTranslation();
@@ -236,6 +240,29 @@ export default function NotesListView({
             )}
           </div>
         </motion.div>
+
+        {viewType === 'all' && (onViewStarred || onOpenArchive) && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="mb-4 flex gap-3">
+            {onViewStarred && (
+              <button
+                onClick={onViewStarred}
+                className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-muted/60 hover:bg-muted border border-muted/80 hover:border-muted-foreground/20 transition-colors text-sm font-medium"
+              >
+                <Star className="h-4 w-4 text-amber-500" />
+                Starred
+              </button>
+            )}
+            {onOpenArchive && (
+              <button
+                onClick={onOpenArchive}
+                className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-muted/60 hover:bg-muted border border-muted/80 hover:border-muted-foreground/20 transition-colors text-sm font-medium"
+              >
+                <Archive className="h-4 w-4 text-muted-foreground" />
+                Archive
+              </button>
+            )}
+          </motion.div>
+        )}
 
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-6">
           <Card className="border-muted/50">

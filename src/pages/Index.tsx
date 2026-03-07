@@ -183,12 +183,10 @@ export default function Index() {
           onOpenSearch={dialogs.openCommandPalette}
           onOpenGraph={dialogs.openGraph}
           onOpenSettings={dialogs.openSettings}
-          onOpenArchive={dialogs.openArchive}
           selectedTagId={nav.selectedTagId}
           onSelectTag={nav.handleSelectTag}
           onGoHome={nav.handleGoHome}
           onViewAllNotes={nav.handleViewAllNotes}
-          onViewStarred={nav.handleViewStarred}
           onViewPlanner={() => {
             nav.setSelectedNoteId(null);
             nav.setSelectedTagId(null);
@@ -274,6 +272,8 @@ export default function Index() {
                 onSelectNote={nav.handleSelectNote}
                 onBack={nav.handleGoHome}
                 onCreateNote={() => handleCreateNote()}
+                onViewStarred={nav.handleViewStarred}
+                onOpenArchive={dialogs.openArchive}
                 isLoading={isLoading}
               />
             ) : nav.viewMode === 'starred' ? (
@@ -283,7 +283,7 @@ export default function Index() {
                 icon={<Star className="h-4 w-4 text-amber-500" />}
                 viewType="starred"
                 onSelectNote={nav.handleSelectNote}
-                onBack={nav.handleGoHome}
+                onBack={nav.handleViewAllNotes}
                 isLoading={false}
               />
             ) : nav.viewMode === 'tag' && nav.selectedTagId ? (
