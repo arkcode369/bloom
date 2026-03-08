@@ -1,3 +1,10 @@
+/**
+ * useSemanticSearch Hook — Phase 6: Semantic Search
+ * Path: src/hooks/useSemanticSearch.ts
+ * 
+ * Meaning-based search using embeddings + cosine similarity.
+ * Debounced input, enriched results with note titles & previews.
+ */
 import { useState, useCallback, useRef } from 'react';
 
 interface SemanticResult {
@@ -36,9 +43,13 @@ export function useSemanticSearch({
       setError(null);
 
       try {
+        // Generate embedding for query
         const queryEmbedding = await embed(query);
+
+        // Search by cosine similarity
         const matches = await searchByEmbedding(queryEmbedding, limit, 0.25);
 
+        // Enrich with note data
         const enriched: SemanticResult[] = await Promise.all(
           matches.map(async (m) => {
             const note = await getNoteById(m.note_id);
