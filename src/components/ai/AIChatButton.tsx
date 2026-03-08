@@ -1,3 +1,10 @@
+/**
+ * AIChatButton Component — Phase 8: AI Chat / Q&A over Notes
+ * Path: src/components/ai/AIChatButton.tsx
+ * 
+ * Sidebar navigation item to toggle AI Chat panel.
+ * Shows unread indicator. Keyboard shortcut: Cmd+J.
+ */
 import React from 'react';
 import { Bot } from 'lucide-react';
 
@@ -30,7 +37,9 @@ export const AIChatButton: React.FC<AIChatButtonProps> = ({
         )}
       </div>
       <span>AI Chat</span>
-      <kbd className="ml-auto text-[10px] text-muted-foreground/50 font-mono">Cmd+J</kbd>
+      <kbd className="ml-auto text-[10px] text-muted-foreground/50 font-mono">
+        Cmd+J
+      </kbd>
     </button>
   );
 };
