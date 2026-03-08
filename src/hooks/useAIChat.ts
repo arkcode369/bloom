@@ -1,3 +1,10 @@
+/**
+ * useAIChat Hook — Phase 8: AI Chat / Q&A over Notes
+ * Path: src/hooks/useAIChat.ts
+ * 
+ * RAG-based chat: embed query -> cosine search top notes -> inject as context -> LLM.
+ * Chat history per session stored in SQLite.
+ */
 import { useState, useCallback, useRef } from 'react';
 
 interface ChatMessage {
@@ -44,6 +51,9 @@ export function useAIChat({
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef(false);
 
+  /**
+   * RAG: Retrieve relevant notes for a query using embeddings
+   */
   const retrieveContext = useCallback(
     async (query: string): Promise<{ context: string; noteIds: string[] }> => {
       try {
@@ -75,6 +85,9 @@ export function useAIChat({
     [embed, searchByEmbedding, getNoteById]
   );
 
+  /**
+   * Send a message and get AI response with RAG context
+   */
   const sendMessage = useCallback(
     async (userMessage: string) => {
       if (!isEnabled || !userMessage.trim() || isStreaming) return;
@@ -82,12 +95,14 @@ export function useAIChat({
       setError(null);
       abortRef.current = false;
 
+      // Create session if needed
       let currentSessionId = sessionId;
       if (!currentSessionId) {
         currentSessionId = await createChatSession(userMessage.slice(0, 50));
         setSessionId(currentSessionId);
       }
 
+      // Add user message to state
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'user',
@@ -97,8 +112,10 @@ export function useAIChat({
       setMessages(prev => [...prev, userMsg]);
       await saveChatMessage(currentSessionId, 'user', userMessage);
 
+      // RAG: retrieve relevant notes
       const { context, noteIds } = await retrieveContext(userMessage);
 
+      // Build messages with injected note context
       const systemWithContext = context
         ? `${SYSTEM_PROMPT}\n\n--- RELEVANT NOTES FROM USER'S KNOWLEDGE BASE ---\n${context}\n--- END OF NOTES ---`
         : SYSTEM_PROMPT;
@@ -109,6 +126,7 @@ export function useAIChat({
         { role: 'user', content: userMessage },
       ];
 
+      // Add placeholder for streaming assistant response
       const assistantId = crypto.randomUUID();
       setMessages(prev => [
         ...prev,
@@ -131,6 +149,7 @@ export function useAIChat({
 
         const finalContent = result || accumulated;
 
+        // Finalize message (remove streaming indicator)
         setMessages(prev =>
           prev.map(m =>
             m.id === assistantId
@@ -139,6 +158,7 @@ export function useAIChat({
           )
         );
 
+        // Save to database
         await saveChatMessage(currentSessionId, 'assistant', finalContent, noteIds, 'ai');
       } catch (err: any) {
         setError(err.message || 'Chat failed');
@@ -153,9 +173,12 @@ export function useAIChat({
         setIsStreaming(false);
       }
     },
-    [isEnabled, isStreaming, sessionId, messages, chatStream, retrieveContext, createChatSession, saveChatMessage]
+    [isEnabled, isStreaming, sessionId, messages, chatStream, createChatSession, saveChatMessage, retrieveContext]
   );
 
+  /**
+   * Load an existing chat session from DB
+   */
   const loadSession = useCallback(
     async (id: string) => {
       try {
@@ -176,12 +199,18 @@ export function useAIChat({
     [getChatHistory]
   );
 
+  /**
+   * Start a fresh chat session
+   */
   const startNewSession = useCallback(() => {
     setSessionId(null);
     setMessages([]);
     setError(null);
   }, []);
 
+  /**
+   * Stop the current streaming response
+   */
   const stopStreaming = useCallback(() => {
     abortRef.current = true;
     setIsStreaming(false);
