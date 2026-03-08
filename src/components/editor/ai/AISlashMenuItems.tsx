@@ -28,6 +28,20 @@ export interface AISlashItem {
   onItemClick: (editor: BlockNoteEditor) => void;
 }
 
+/**
+ * Get AI-related slash menu items.
+ * Each item triggers a callback that the parent component handles
+ * by calling the AI service via useAI().chatStream().
+ * 
+ * Usage in BlockNoteEditor.tsx:
+ * ```tsx
+ * import { getAISlashMenuItems, type AIAction } from './ai';
+ * 
+ * const aiItems = getAISlashMenuItems((action, editor) => {
+ *   aiWriter.executeAction(action, editor);
+ * });
+ * ```
+ */
 export function getAISlashMenuItems(
   onAIAction: (action: AIAction, editor: BlockNoteEditor) => void
 ): AISlashItem[] {
@@ -98,6 +112,10 @@ export function getAISlashMenuItems(
   ];
 }
 
+/**
+ * Build the system prompt for each AI action type.
+ * These prompts are passed as systemPrompt in ChatRequest to the AI service.
+ */
 export function getSystemPromptForAction(action: AIAction, lang?: string): string {
   const prompts: Record<AIAction, string> = {
     continue: `You are a writing assistant integrated into a note-taking app called Bloom. Continue writing from where the user left off. 
@@ -134,6 +152,9 @@ Preserve the key information. Only output the simplified text.`,
   return prompts[action];
 }
 
+/**
+ * Map action types to user-friendly labels for UI display
+ */
 export const AI_ACTION_LABELS: Record<AIAction, string> = {
   continue: 'Continue Writing',
   rewrite: 'Rewrite',
