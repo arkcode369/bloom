@@ -1,3 +1,11 @@
+/**
+ * TagSuggestion Component — Phase 5: Smart Tagging System
+ * Path: src/components/notes/TagSuggestion.tsx
+ * 
+ * Pill-style AI tag suggestions below the editor.
+ * Click to accept individual tags, accept all, or dismiss.
+ * Shows confidence score per tag.
+ */
 import React from 'react';
 import { Tag, Sparkles, Plus, X, Loader2 } from 'lucide-react';
 
@@ -54,6 +62,9 @@ export const TagSuggestion: React.FC<TagSuggestionProps> = ({
               <span className="text-[10px] text-muted-foreground ml-0.5">
                 {Math.round(tag.confidence * 100)}%
               </span>
+              {tag.isExisting && (
+                <span className="text-[10px] text-emerald-500 ml-0.5">exists</span>
+              )}
               <button
                 onClick={(e) => { e.stopPropagation(); onAccept(tag); }}
                 className="ml-0.5 rounded-full p-0.5 hover:bg-emerald-500/20"
