@@ -1,7 +1,34 @@
 /**
- * Editor AI Components — Barrel Exports
- * src/components/editor/ai/index.ts
+ * AI Editor Components - Barrel Export
+ * 
+ * Location: src/components/editor/ai/index.ts
+ * 
+ * Usage in BlockNoteEditor.tsx:
+ * ```tsx
+ * import {
+ *   getAISlashMenuItems,
+ *   AIWritingToolbar,
+ *   AIInlinePreview,
+ *   useAIWriter,
+ *   type AIAction,
+ * } from './ai';
+ * ```
  */
-export { default as AIWritingToolbar } from './AIWritingToolbar';
-export { default as AIInlinePreview } from './AIInlinePreview';
-export { default as AISlashMenuItems, AI_ACTIONS, getSystemPromptForAction, type AIAction } from './AISlashMenuItems';
+
+// Slash menu items and action types
+export {
+  getAISlashMenuItems,
+  getSystemPromptForAction,
+  AI_ACTION_LABELS,
+} from './AISlashMenuItems';
+export type { AIAction, AISlashItem } from './AISlashMenuItems';
+
+// Floating selection toolbar
+export { AIWritingToolbar } from './AIWritingToolbar';
+
+// Inline streaming preview with accept/reject
+export { AIInlinePreview } from './AIInlinePreview';
+
+// Orchestrator hook
+export { useAIWriter } from './useAIWriter';
+export type { AIWriterState } from './useAIWriter';
