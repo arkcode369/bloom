@@ -1,3 +1,10 @@
+/**
+ * useAutoTag Hook — Phase 5: Smart Tagging System
+ * Path: src/hooks/useAutoTag.ts
+ * 
+ * Trigger saat note disimpan, kirim content ke AI dengan existing tags sebagai context.
+ * Supports single note analysis and bulk re-tagging.
+ */
 import { useState, useCallback } from 'react';
 
 interface TagSuggestion {
@@ -55,6 +62,7 @@ Example response:
           { role: 'user', content: userMessage },
         ]);
 
+        // Parse JSON from response
         const jsonMatch = result.match(/\[.*\]/s);
         if (!jsonMatch) throw new Error('Invalid AI response format');
 
@@ -74,6 +82,7 @@ Example response:
 
         setSuggestions(tagSuggestions);
 
+        // Cache suggestions in DB
         await saveTagSuggestions(
           noteId,
           tagSuggestions.map(s => s.name),
