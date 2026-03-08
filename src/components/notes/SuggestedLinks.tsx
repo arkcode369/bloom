@@ -1,3 +1,10 @@
+/**
+ * SuggestedLinks Panel — Phase 7: Auto-linking (Smart Wikilinks)
+ * Path: src/components/notes/SuggestedLinks.tsx
+ * 
+ * Sidebar panel in NoteEditor showing AI-discovered related notes.
+ * One-click insert wikilink. Shows relevance % and link status.
+ */
 import React from 'react';
 import { Link2, Plus, Loader2, Sparkles } from 'lucide-react';
 
@@ -39,6 +46,7 @@ export const SuggestedLinks: React.FC<SuggestedLinksProps> = ({
 
   return (
     <div className="border-t border-border/40">
+      {/* Header */}
       <div className="flex items-center justify-between px-3 py-2">
         <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <Sparkles className="h-3 w-3 text-violet-500" />
@@ -56,6 +64,7 @@ export const SuggestedLinks: React.FC<SuggestedLinksProps> = ({
         </button>
       </div>
 
+      {/* Content */}
       {isAnalyzing ? (
         <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -90,7 +99,7 @@ export const SuggestedLinks: React.FC<SuggestedLinksProps> = ({
                   }}
                   className="opacity-0 group-hover:opacity-100 rounded p-1
                              hover:bg-accent transition-all"
-                  title="Insert wikilink"
+                  title="Insert [[wikilink]]"
                 >
                   <Plus className="h-3 w-3" />
                 </button>
