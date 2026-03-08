@@ -1,3 +1,10 @@
+/**
+ * useEmbeddingSync Hook — Phase 6: Semantic Search
+ * Path: src/hooks/useEmbeddingSync.ts
+ * 
+ * Background embedding generation on app start (batch 20 notes).
+ * Incremental re-embed on note update (debounced 5 seconds).
+ */
 import { useState, useCallback, useRef, useEffect } from 'react';
 
 interface UseEmbeddingSyncOptions {
@@ -22,6 +29,9 @@ export function useEmbeddingSync({
   const [error, setError] = useState<string | null>(null);
   const debounceTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
+  /**
+   * Background sync: embed all notes that don't have embeddings yet
+   */
   const syncAll = useCallback(async () => {
     if (!isEnabled || isSyncing) return;
 
@@ -37,6 +47,7 @@ export function useEmbeddingSync({
         return;
       }
 
+      // Process in batches of 20
       const BATCH_SIZE = 20;
       for (let i = 0; i < noteIds.length; i += BATCH_SIZE) {
         const batch = noteIds.slice(i, i + BATCH_SIZE);
@@ -58,6 +69,7 @@ export function useEmbeddingSync({
             );
           }
         } catch (batchErr) {
+          // Fall back to single embedding on batch failure
           for (const note of validNotes) {
             try {
               const text = `${note.title}\n\n${note.content}`.slice(0, 8000);
@@ -70,6 +82,8 @@ export function useEmbeddingSync({
         }
 
         setProgress({ done: Math.min(i + BATCH_SIZE, noteIds.length), total: noteIds.length });
+
+        // Small delay between batches to avoid rate limiting
         await new Promise(r => setTimeout(r, 200));
       }
     } catch (err: any) {
@@ -79,10 +93,14 @@ export function useEmbeddingSync({
     }
   }, [isEnabled, isSyncing, getNotesWithoutEmbeddings, getNoteById, embed, embedBatch, saveEmbedding]);
 
+  /**
+   * Incremental: re-embed a single note (debounced 5s after last edit)
+   */
   const embedNote = useCallback(
     (noteId: string, title: string, content: string) => {
       if (!isEnabled) return;
 
+      // Clear previous debounce for this note
       const existing = debounceTimers.current.get(noteId);
       if (existing) clearTimeout(existing);
 
@@ -95,13 +113,14 @@ export function useEmbeddingSync({
           console.error(`[EmbedSync] Failed to re-embed note ${noteId}:`, err);
         }
         debounceTimers.current.delete(noteId);
-      }, 5000);
+      }, 5000); // 5 second debounce
 
       debounceTimers.current.set(noteId, timer);
     },
     [isEnabled, embed, saveEmbedding]
   );
 
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       debounceTimers.current.forEach(timer => clearTimeout(timer));
